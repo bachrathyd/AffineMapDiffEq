@@ -12,36 +12,45 @@ end
 #end
 
 function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
-    mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
-    return mus[1]::Vector{ComplexF64}
+    #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
+    Nstep = size(dp.StateSmaplingTime, 1)
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+    mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
+    return mus[1], mus[2]#::Vector{ComplexF64}
 end
 function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
-    Nstep=size(dp.StateSmaplingTime, 1)*2;
-    s0 = zeros(Nstep,)
-    v0 = LinMap(dpdp, s0; p=p)
-    #println(norm(s0-v0))
-    mus = eigsolve(s -> LinMap(dpdp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
-    
-    s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
-    ###println(norm(s0 - LinMap(dpdp, s0; p=p)))
-    #TODO: it might be better to incluse the mus calcluations here too
-    for _ in 1:5
-        s0 = real.(find_fix_pont(s0, LinMap(dpdp, s0; p=p), mus[1], mus[2]))
-       # println(norm(s0 - LinMap(dpdp, s0; p=p)))
-    end
+    Nstep = size(dp.StateSmaplingTime, 1)
+    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    for _ in 1:2
+        v0 = LinMap(dpdp, s0; p=p)
+        #println(norm(s0-v0))
+        Nstep = size(dp.StateSmaplingTime, 1)
+        s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+        mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
 
+        #mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+
+        ##TODO: schursolve
+        s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
+        ###println(norm(s0 - LinMap(dpdp, s0; p=p)))
+        #TODO: it might be better to incluse the mus calcluations here too
+        for _ in 1:2
+            s0 = real.(find_fix_pont(s0, LinMap(dpdp, s0; p=p), mus[1], mus[2]))
+            # println(norm(s0 - LinMap(dpdp, s0; p=p)))
+        end
+    end
     #return mus[1]::Vector{ComplexF64}
-    return mus,s0
+    return mus, s0
 end
 
-function LinMap(dp::dynamic_problemSampled, sv; p=dp.DDEdynProblem.p)# where T
+function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
-    s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
+    #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
     StateSmaplingTime = LinRange(-dp.maxdelay, 0.0, size(s, 1))
     dt = StateSmaplingTime[2] - StateSmaplingTime[1]
 
- #TODO: milyen interpoláció kell?
+    #TODO: milyen interpoláció kell?
     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #itp = interpolate(s, BSpline(Linear()))
     #itp = interpolate(s, BSpline(Linear()))
@@ -57,9 +66,10 @@ function LinMap(dp::dynamic_problemSampled, sv; p=dp.DDEdynProblem.p)# where T
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts
     v = [getvalues(sol, ti) for ti in StateSmaplingTime .+ dp.Tperiod]
-    vv = reduce(vcat, v)
+    #vv = reduce(vcat, v)
     #return vv::Vector{Float64}
-    return vv#::Vector{T}
+    #return vv#::Vector{T}
+    return v
 end
 
 function LinMapPerturbed(dp::dynamic_problemSampled, sv::Vector{Float64})::Vector{Float64}
@@ -80,10 +90,19 @@ end
 
 
 #function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval::AbstractVector,eigvec::Vector{<:AbstractVector})
-function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval,eigvec)
-    x=(v0-s0)
-    A=transpose(mapreduce(permutedims, vcat, eigvec))
-    fix_v=v0 - A *( ((A'A) \ ( A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
+function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
+    x = (v0 - s0)
+
+    ##AtA = conj( eigvec' .* eigvec)
+    AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    vi = AtA \ Atx
+    vi_mu = (vi .* ((eigval) ./ (eigval .- 1.0)))
+    #A=transpose(mapreduce(permutedims, vcat, eigvec))
+    #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
+
+    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, vi_mu))
+    return fix_v
 end
 
 function interpolate_complex_on_grid(x0::AbstractVector, t0::Float64, dt::Float64, x::Float64)
