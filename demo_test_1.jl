@@ -11,7 +11,6 @@ using StaticArrays
 using DifferentialEquations
 
 using MDBM
-
 function delayed_turning_STATIC(u, h, p, t)
     # Parameters
     ζ, ωn, k, τ, f0 = p
@@ -35,7 +34,7 @@ u0 = SA[0.0, 0.0]
 ζ = 0.2          # damping coefficient
 ωn = 2.0#0.2          # nat. freq
 k = 0.45#4#5#8;#5         # cut.coeff
-τ = 2.0          # Time delay
+τ = 2.4          # Time delay
 f0 = 1.0         # excitation
 p = [ζ, ωn, k, τ, f0]
 p0 = [ζ, ωn, k, τ, 0.0]
@@ -55,28 +54,46 @@ sol = solve(probTurning, MethodOfSteps(BS3()))#abstol,reltol
 plot(sol)
 plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 
-Nstep = 1500
-τmax = 12.8
+Nstep = 150
+τmax = 3.0
 dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=10, zerofixpont=true);
 
 
 ## fix point by simulation
-
 OneMap = s -> LinMap(dpdp, s; p=p)
+
+
 #Fix point
-vfix_simulation = zeros(Nstep,);#v0;s0
+vfix_simulation = zeros(typeof(u0),Nstep);#v0;s0
+vfix_simulation = rand(typeof(u0),Nstep);#v0;s0
 for _ in 1:500
     vfix_simulation = OneMap(vfix_simulation)
 end
 norm(vfix_simulation - LinMap(dpdp, vfix_simulation; p=p))
-plot(vfix_simulation)
+plot(getindex.(vfix_simulation,[1]))
+plot!(getindex.(vfix_simulation,[2]))
+
+#Nstep=size(dpdp.StateSmaplingTime, 1);
+#s0= rand(typeof(dpdp.DDEdynProblem.u0),Nstep);
+#mus = eigsolve(s -> LinMap(dpdp, s; p=p), s0, dpdp.eigN, :LM)
+
+
+Base.:+(a::SVector, b::Bool) = a .+ b
 
 # fix point by affine map
-mus0=spectrum(dpdp;p=p0)
+mus0,As=spectrum(dpdp;p=p0)
 plot(log.(abs.(mus0)))
 muaff,s0aff=affine(dpdp; p=p);
 plot!(log.(abs.(muaff[1])))
-plot(s0aff)
+
+
+plot(getindex.(vfix_simulation,[1]))
+plot!(getindex.(vfix_simulation,[2]))
+plot!(real.(getindex.(s0aff,[1])) )
+plot!(real.(getindex.(s0aff,[2])) )
+
+
+
 
 #@code_warntype affine(dpdp; p=p)
 @benchmark affine($dpdp; p=$p)
