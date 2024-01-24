@@ -23,7 +23,7 @@ function affine(dp::dynamic_problemSampled,s0; p=dp.DDEdynProblem.p)
         v0 = LinMap(dpdp, s0; p=p)
         #println(norm(s0-v0))
         Nstep = size(dp.StateSmaplingTime, 1)
-        s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+        s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)*0.0001;
         mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
 
         #mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
@@ -65,8 +65,8 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
 
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
-    #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
-    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
+   # sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts
     v = [getvalues(sol, ti) for ti in StateSmaplingTime .+ dp.Tperiod]
     #vv = reduce(vcat, v)
