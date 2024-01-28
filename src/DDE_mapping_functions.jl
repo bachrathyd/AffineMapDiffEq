@@ -31,12 +31,13 @@ end
 function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     return Float64(abs(spectrum(dp; p=p)[1][1]))::Float64
 end
-function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
+function affine(dp::dynamic_problemSampled,s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
-    Nstep = size(dp.StateSmaplingTime, 1)
-    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
-    #s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)#TODO - ez csak teszt
-    v0 = LinMap(dp, s0; p=p)
+        v0 = LinMap(dpdp, s0; p=p)
+        #println(norm(s0-v0))
+        Nstep = size(dp.StateSmaplingTime, 1)
+        s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)*0.0001;
+        mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
 
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
@@ -67,7 +68,12 @@ function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #return mus[1]::Vector{ComplexF64}
     return mus, s0
 end
-
+function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
+    #TODO: fixed dimension problem!!!!
+    Nstep = size(dp.StateSmaplingTime, 1)
+    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    affine(dp,s0; p=p)
+end
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
@@ -87,9 +93,9 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
 
-#    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
-   # sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()))#, save_everystep=false)#abstol,reltol
-    #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
+    #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
+    #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts
     v = [getvalues(sol, ti) for ti in StateSmaplingTime .+ dp.Tperiod]
     #vv = reduce(vcat, v)
