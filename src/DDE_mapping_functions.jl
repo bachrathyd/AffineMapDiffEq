@@ -17,38 +17,36 @@ function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
 
     #mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi(orth=KrylovKit.ClassicalGramSchmidt()))
-   # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
+    # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
-    mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim =dp.eigN*1+5,tol=1e-4,verbosity = 0)),[3,2,1])
-#    mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, orth=KrylovKit.ClassicalGramSchmidt()),[3,2,1])
- # mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi()),[3,2,1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-4, verbosity=0)), [3, 2, 1])
+    #    mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, orth=KrylovKit.ClassicalGramSchmidt()),[3,2,1])
+    # mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi()),[3,2,1])
     # T, vecs, vals, info = schursolve(...) with
 
-    
+
     return mus[1], mus[2]#::Vector{ComplexF64}
 end
 function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     return Float64(abs(spectrum(dp; p=p)[1][1]))::Float64
 end
-function affine(dp::dynamic_problemSampled,s0; p=dp.DDEdynProblem.p)
+function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
-        v0 = LinMap(dpdp, s0; p=p)
-        #println(norm(s0-v0))
-        Nstep = size(dp.StateSmaplingTime, 1)
-        s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)*0.0001;
-        mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
-
+    v0 = LinMap(dpdp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
-    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * 0.0001
+    
+
+    #println(norm(s0-v0))
     ####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
     #####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
-    
+
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
-    
+
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    mus =  getindex(schursolve(s -> LinMap(dp, s+ s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim =dp.eigN*1+5,tol=1e-4,verbosity = 0)),[3,2,1])
+    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-4, verbosity=0)), [3, 2, 1])
     #TODO: schursolve
 
     s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
@@ -58,11 +56,11 @@ function affine(dp::dynamic_problemSampled,s0; p=dp.DDEdynProblem.p)
     #TODO: it might be better to incluse the mus calcluations here too
     for k_fix_iteration in 1:10
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
-        normerror=norm(s0 - LinMap(dp, s0; p=p))
-             if (normerror)<1e-3 
-                println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
-             break
-             end
+        normerror = norm(s0 - LinMap(dp, s0; p=p))
+        if (normerror) < 1e-2
+            # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+            break
+        end
     end
 
     #return mus[1]::Vector{ComplexF64}
@@ -72,7 +70,7 @@ function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     Nstep = size(dp.StateSmaplingTime, 1)
     s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
-    affine(dp,s0; p=p)
+    affine(dp, s0; p=p)
 end
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
