@@ -68,7 +68,7 @@ plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 Nstep = 30
 τmax = NF(2pi+0.1)
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
- T; Historyresolution=Nstep, eigN=4, zerofixpont=true);
+ T; Historyresolution=Nstep, eigN=2, zerofixpont=true);
 
 
 # fix point by affine map
@@ -125,9 +125,9 @@ iteration=4#number of refinements (resolution doubling)
 x_eval,y_eval=getevaluatedpoints(mymdbm)
 #interpolated points of the solution (approximately where foo(x,y) == 0 and c(x,y)>0)
 x_sol,y_sol=getinterpolatedsolution(mymdbm)
-scatter(x_eval,y_eval,markersize=1)
-scatter!(x_sol,y_sol,markersize=3)
-#scatter(x_sol,y_sol,markersize=1)
+#scatter(x_eval,y_eval,markersize=1)
+#scatter!(x_sol,y_sol,markersize=3)
+scatter(x_sol,y_sol,markersize=1)
 
 
 ax1=Axis(-1:0.5:5,"δ") # initial grid in x direction
@@ -142,9 +142,9 @@ mymdbm=MDBM_Problem(fooDelay,[ax1,ax2])
 #points where the function foo was evaluated
 x_eval,y_eval=getevaluatedpoints(mymdbm)
 x_sol,y_sol=getinterpolatedsolution(mymdbm)
-scatter(x_eval,y_eval,markersize=1)
-scatter!(x_sol,y_sol,markersize=2)
-#scatter(x_sol,y_sol,markersize=1)
+#scatter(x_eval,y_eval,markersize=1)
+#scatter!(x_sol,y_sol,markersize=2)
+scatter(x_sol,y_sol,markersize=1)
 
 
 

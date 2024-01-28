@@ -12,6 +12,8 @@ using StaticArrays
 using DifferentialEquations
 
 using MDBM
+
+#TODO: SecondOrderDDEProblem(f, [, du0, u0], h, tspan[, p]; <keyword arguments>)
 function delayed_turning_STATIC(u, h, p, t)
     # Parameters
     ζ, ωn, k, τ, f0 = p
