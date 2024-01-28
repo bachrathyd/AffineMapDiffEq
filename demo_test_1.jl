@@ -6,6 +6,7 @@ includet("src\\DDE_mapping_functions.jl")
 
 using BenchmarkTools
 using Plots
+plotly()
 using Profile
 using StaticArrays
 using DifferentialEquations
@@ -56,7 +57,8 @@ plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 
 Nstep = 150
 τmax = 3.0
-dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=10, zerofixpont=true);
+dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax,
+ T; Historyresolution=Nstep, eigN=10, zerofixpont=true);
 
 
 ## fix point by simulation
@@ -81,7 +83,7 @@ plot!(getindex.(vfix_simulation,[2]))
 Base.:+(a::SVector, b::Bool) = a .+ b
 
 # fix point by affine map
-mus0,As=spectrum(dpdp;p=p0)
+mus0,As=spectrum(dpdp;p=p0);
 plot(log.(abs.(mus0)))
 muaff,s0aff=affine(dpdp; p=p);
 plot!(log.(abs.(muaff[1])))
@@ -99,7 +101,7 @@ plot!(real.(getindex.(s0aff,[2])) )
 @benchmark affine($dpdp; p=$p)
 
 function foo()
-    for _ in 1:100
+    for _ in 1:1000
         affine(dpdp; p=p)
     end
 end
