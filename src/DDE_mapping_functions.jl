@@ -20,7 +20,7 @@ function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
-    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-5, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-3, verbosity=0)), [3, 2, 1])
     #    mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, orth=KrylovKit.ClassicalGramSchmidt()),[3,2,1])
     # mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi()),[3,2,1])
     # T, vecs, vals, info = schursolve(...) with
@@ -29,7 +29,11 @@ function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     return mus[1], mus[2]#::Vector{ComplexF64}
 end
 function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
-    return Float64(abs(spectrum(dp; p=p)[1][1]))::Float64
+    if dp.zerofixpont
+        return Float64(maximum(abs.(spectrum(dp; p=p)[1])))::Float64
+    else
+        return Float64(maximum(abs.(affine(dp; p=p)[1][1])))::Float64
+    end
 end
 function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
@@ -46,7 +50,7 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-5, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-3, verbosity=0)), [3, 2, 1])
     #TODO: schursolve
 
     s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
@@ -54,10 +58,10 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
 
     ###println(norm(s0 - LinMap(dp, s0; p=p)))
     #TODO: it might be better to incluse the mus calcluations here too
-    for k_fix_iteration in 1:10
+    for k_fix_iteration in 1:40
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
         normerror = norm(s0 - LinMap(dp, s0; p=p))
-        if (normerror) < 1e-2
+        if (normerror) < 1e-3
             # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
         end
@@ -69,7 +73,8 @@ end
 function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     Nstep = size(dp.StateSmaplingTime, 1)
-    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    #s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
     affine(dp, s0; p=p)
 end
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
@@ -100,7 +105,7 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     
     # hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
-    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt;verbose=false)#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, abstol=1e-5,reltol=1e-5)#, save_everystep=false)#abstol,reltol
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, reltol=1e-15, save_everystep=false)#, save_everystep=false)#abstol,reltol
