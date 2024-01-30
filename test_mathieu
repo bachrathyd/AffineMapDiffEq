@@ -20,7 +20,8 @@ function f_now(p, t)
     ζ, δ, ϵ, b, τ , T  = p
    # println("Computed $t")
    # println("Computed $p")
-   @fastmath SA[-(δ+ϵ*cos(t)), -2*ζ]
+   #SA[-(δ+ϵ*     cos(t)), -2*ζ]
+   SA[-(δ+ϵ*sign(cos(t))), -2*ζ]
 end
 #@memoize 
 function f_past(p, t)
@@ -34,7 +35,7 @@ function DelayMathieu(u, h, p, t)
     ζ, δ, ϵ, b, τ , T = p
     # Components of the delayed differential equation
     dx = u[2]
-    @fastmath ddx = f_now(p, t)' * u + b * h(p, t - τ)[1]  # Surface regeneration effect
+    ddx = f_now(p, t)' * u + b * h(p, t - τ)[1]  # Surface regeneration effect
     # Update the derivative vector
     SA[dx, ddx]
 end
@@ -152,10 +153,12 @@ scatter(x_sol,y_sol,markersize=1)
 
 ax1=Axis(-1:0.5:5,"δ") # initial grid in x direction
 ax2=Axis(-1.5:0.4:1.5,"b") # initial grid in y direction
-ax3=Axis(0.00:1:8.0,"ϵ") # initial grid in y direction
+ax3=Axis(0.0:1:8.0,"ϵ") # initial grid in y direction
+#ax3=Axis(0.0:0.5:4.0,"ϵ/2") # initial grid in y direction
 
 function fooDelayMathieu(δ, b, ϵ)
     ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , T));
+    #ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ*2.0, b, τ , T));
     return ABSmuMax-1.0
 end
 mymdbm=MDBM_Problem(fooDelayMathieu,[ax1,ax2,ax3])

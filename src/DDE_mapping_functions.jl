@@ -20,7 +20,7 @@ function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
-    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-3, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
     #    mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, orth=KrylovKit.ClassicalGramSchmidt()),[3,2,1])
     # mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi()),[3,2,1])
     # T, vecs, vals, info = schursolve(...) with
@@ -50,7 +50,7 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-3, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
     #TODO: schursolve
 
     s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
@@ -89,7 +89,8 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     Hist_interp_linear = scale(itp, StateSmaplingTime)
     #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-    hint(p, t) = Hist_interp_linear(t)
+    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
+    #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
 
     NewTimePoints=StateSmaplingTime .+ dp.Tperiod       
     #####TODO: ez miért lassabb
@@ -105,7 +106,10 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     
     # hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
+   
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt;verbose=false)#, save_everystep=false)#abstol,reltol
+
+#    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg;verbose=false, abstol=1e-10,reltol=1e-10)#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, abstol=1e-5,reltol=1e-5)#, save_everystep=false)#abstol,reltol
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, reltol=1e-15, save_everystep=false)#, save_everystep=false)#abstol,reltol
