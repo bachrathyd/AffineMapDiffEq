@@ -22,6 +22,7 @@ struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     alg#::MethodOfSteps # e.g.: alg = MethodOfSteps(Tsit5())
     maxdelay#::Tfloat
     Tperiod#::Tfloat
+    dt#::Tfloat
     StateSmaplingTime#::LinRange#Vector{Tfloat}
     eigN#::Tint # number of eigen vectors
     eigs#::Vector{TCompFloat}

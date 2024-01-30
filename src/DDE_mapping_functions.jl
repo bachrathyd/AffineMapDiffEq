@@ -1,11 +1,11 @@
-function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4, zerofixpont=true)
+function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4, zerofixpont=true,dt=maxdelay/Historyresolution)
     StateSmaplingTime = LinRange(-maxdelay, Float64(0.0), Historyresolution)#TODO: Float64!!!
     eigs = zeros(ComplexF64, eigN)
     #eigsA = Vector{Vector{ComplexF64}}(undef,eigN)
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, StateSmaplingTime, eigN, eigs, zerofixpont)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.DDEdynProblem, kwargs...)
@@ -81,8 +81,8 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
     StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
-    dt = StateSmaplingTime[2] - StateSmaplingTime[1]
-
+    #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
+    dt=dp.dt
     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #itp = interpolate(s, BSpline(Linear()))
