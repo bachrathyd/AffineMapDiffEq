@@ -37,7 +37,7 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
 end
 function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
-    v0 = LinMap(dpdp, s0; p=p)
+     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
     s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * 0.0001
@@ -61,7 +61,7 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     for k_fix_iteration in 1:40
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
         normerror = norm(s0 - LinMap(dp, s0; p=p))
-        if (normerror) < 1e-3
+        if (normerror) < 1e-5
             # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
         end
@@ -80,9 +80,11 @@ end
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
-    StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
+    #StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
+    StateSmaplingTime = dp.StateSmaplingTime
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
     dt=dp.dt
+
     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #itp = interpolate(s, BSpline(Linear()))
