@@ -13,10 +13,10 @@ end
 
 
 
-#u0=SA[1.0,2.0]
-#u0=[SA[10,20],SA[1.0,2.0],4.0,2]
-x=[1.0,2.0]
-srand=randsimilar(x,4)
+###u0=SA[1.0,2.0]
+###u0=[SA[10,20],SA[1.0,2.0],4.0,2]
+##x=[1.0,2.0]
+##srand=randsimilar(x,4)
 function randsimilar(x::AbstractArray,N::Int)::Vector{typeof(x)}
         xrand=[randsimilar(xi,N) for xi in x]
 end
@@ -27,7 +27,10 @@ end
 function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
-    s_start=[dp.DDEdynProblem.u0 for _ in 1:Nstep]
+    #s_start=[dp.DDEdynProblem.u0 for _ in 1:Nstep] #TODO:fill!!!
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) 
+ 
+
     #randsimilar!(s_start)
     #EIGEN BASED
     #mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi(orth=KrylovKit.ClassicalGramSchmidt()))
