@@ -70,10 +70,10 @@ plot(sol)
 plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 
 
-Nstep = 20
+Nstep = 50
 τmax = NF(2pi+0.1)
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
- T; Historyresolution=Nstep, eigN=1, zerofixpont=false);
+ T; Historyresolution=Nstep, eigN=10, zerofixpont=false);
 
 # fix point by affine map
 muaff, s0aff = affine(dpdp; p=p);
@@ -89,8 +89,8 @@ plot!(getindex.(s0aff,2))
 
 
 println("----------Start brute-force---------------")
-δv=0:0.101:10 # initial grid in x direction
-bv=-1.501:0.1:1.5 # initial grid in y direction
+δv=0:0.051:10 # initial grid in x direction
+bv=-1.501:0.05:1.5 # initial grid in y direction
 Aaff=zeros(size(bv,1),size(δv,1))
 Spek_aff=zeros(size(bv,1),size(δv,1))
 

@@ -20,66 +20,68 @@ function f_now(p, t)
     ζ, δ, ϵ, b, τ , T  = p
    # println("Computed $t")
    # println("Computed $p")
-   #SA[-(δ+ϵ*     cos(t)), -2*ζ]
-   SA[-(δ+ϵ*sign(cos(t))), -2*ζ]
+   SA[-(δ+ϵ*     cos(t)), -2*ζ]
+   #SA[-(δ+ϵ*sign(cos(t))), -2*ζ]
 end
 #@memoize 
 function f_past(p, t)
     ζ, δ, ϵ, b, τ , T  = p
     SA[b, 0]
 end
-#f_now(p, 0.6)' * SA[1.0, 1.0]
 
 function DelayMathieu(u, h, p, t)
-    # Parameters
-    ζ, δ, ϵ, b, τ , T = p
-    # Components of the delayed differential equation
+    ζ, δ, ϵ, b, τ , ν, T = p
     dx = u[2]
-    ddx = f_now(p, t)' * u + b * h(p, t - τ)[1]  # Surface regeneration effect
-    # Update the derivative vector
+    ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] + ν*h(p, t - τ, Val{1})[2]
     SA[dx, ddx]
 end
+
+
+ζ = 0.03  
+δ = 1.1
+ϵ = 0.2
+τ = 2pi 
+b = 0.2
+ν=0.25 # Neutral coefficient
+T= 6;2pi
+p = ζ, δ, ϵ, b, τ , ν, T 
+#p = (ζ, ωn, k, τ,10.0)
+
+u0 = SA[1.0, 1.0]
+h(p, t) = SA[0.0; -0.0]
+h(p, t, deriv::Type{Val{1}})= SA[0.0, 0.0]
+probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 20.0), p; constant_lags=[τ],neutral=true)
+
+sol = solve(probMathieu, MethodOfSteps(BS3()))#abstol,reltol
+plot(sol)
+
+
+
+plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
+
 Base.:+(a::SVector, b::Bool) = a .+ b
 
 
-##<<<<<<<<<<< Lin Map based on
-NF=Float64
-ζ = NF(0.02)          # damping coefficient
-δ = NF(1.5)#0.2          # nat. freq
-ϵ = NF(0.15)#4#5#8;#5         # cut.coeff
-τ = NF(2pi)          # Time delay
-b = NF(0.5)
-T= NF(2pi)
-p = ζ, δ, ϵ, b, τ , T
-#p = (ζ, ωn, k, τ,10.0)
-
-# test simulation
-u0 = SA{NF}[1.0, 0.0]
-h(p, t) = SA{NF}[0.0; 0.0]
-probMathieu = DDEProblem(DelayMathieu, u0, h, (NF(0.0), NF(T * 10.0)), p; constant_lags=[τ])
-
-#StateSmaplingTime = LinRange(-τ, 0.0, 200) .+ T
-
-#solve(prob,RK4();dt=0.005,adaptive=false)
-sol = solve(probMathieu, MethodOfSteps(BS3()))#abstol,reltol
-plot(sol)
-plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
-
-
-Nstep = 20
-τmax = NF(2pi+0.1)
-dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
- T; Historyresolution=Nstep, eigN=1, zerofixpont=true);
+Nstep = 100
+τmax = 2pi+0.1
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=50, zerofixpont=true);
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=1, zerofixpont=true);
 
 # fix point by affine map
 muaff, s0aff = affine(dpdp; p=p);
-plot(log.(abs.(muaff[1])))
 mus0, As = spectrum(dpdp; p=p);
-scatter!(1:size(mus0,1),log.(abs.(mus0)))
+plot(log.(abs.(muaff[1])))
+plot!(log.(abs.(mus0)))
+
 
 scatter(muaff[1])
 scatter!(mus0)
 plot!(sin.(0:0.01:2pi),cos.(0:0.01:2pi))
+
+
+
+
 
 #@code_warntype spectrum(dpdp; p=p)
 #@code_warntype affine(dpdp; p=p)
@@ -113,9 +115,10 @@ using MDBM
 
 ax1=Axis(-1:0.5:5,"δ") # initial grid in x direction
 ax2=Axis(0.0:1.0:8.0,"ϵ") # initial grid in y direction
-b=-0.00
+b=0.00
+ν=0.05;0.0
 function fooMathieu(δ, ϵ)
-    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , T));
+    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , ν, T ));
     return ABSmuMax-1.0
 end
 mymdbm=MDBM_Problem(fooMathieu,[ax1,ax2])
@@ -127,14 +130,16 @@ x_eval,y_eval=getevaluatedpoints(mymdbm)
 x_sol,y_sol=getinterpolatedsolution(mymdbm)
 #scatter(x_eval,y_eval,markersize=1)
 #scatter!(x_sol,y_sol,markersize=3)
-scatter(x_sol,y_sol,markersize=1)
+scatter!(x_sol,y_sol,markersize=1)
+
+
 
 
 ax1=Axis(-1:0.5:5,"δ") # initial grid in x direction
 ax2=Axis(-1.5:0.4:1.5,"b") # initial grid in y direction
 ϵ=2.0
 function fooDelay(δ, b)
-    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , T));
+    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , ν, T ));
     return ABSmuMax-1.0
 end
 mymdbm=MDBM_Problem(fooDelay,[ax1,ax2])
@@ -157,8 +162,7 @@ ax3=Axis(0.0:1:8.0,"ϵ") # initial grid in y direction
 #ax3=Axis(0.0:0.5:4.0,"ϵ/2") # initial grid in y direction
 
 function fooDelayMathieu(δ, b, ϵ)
-    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , T));
-    #ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ*2.0, b, τ , T));
+    ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , ν, T ));
     return ABSmuMax-1.0
 end
 mymdbm=MDBM_Problem(fooDelayMathieu,[ax1,ax2,ax3])

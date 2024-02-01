@@ -30,7 +30,7 @@ function delayed_turning_STATIC_SSV(u, h, p, t)
 
 
     dx = u[2]
-    ddx = -2 * ζ * u[2] - ωn * (u[1]) + k * (h0 + u[1] - h(p, t - tau)[1])  # Surface regeneration effect
+    ddx = -2 * ζ * u[2] - ωn * (u[1]) + k * (h0 - u[1] + h(p, t - tau)[1])  # Surface regeneration effect
 
     # Update the derivative vector
     SA[dx, ddx]
@@ -42,7 +42,7 @@ Base.:+(a::SVector, b::Bool) = a .+ b
 ##<<<<<<<<<<< Lin Map based on
 u0 = SA[0.0, 0.0]
 
-ζ = 0.2          # damping coefficient
+ζ = 0.05          # damping coefficient
 ωn = 1.0#0.2          # nat. freq
 k = 0.15#4#5#8;#5         # cut.coeff
 
@@ -65,6 +65,7 @@ probTurningSSV = DDEProblem(delayed_turning_STATIC_SSV, u0, h, tspan, p)
 #StateSmaplingTime = LinRange(-τ, 0.0, 200) .+ T
 sol = solve(probTurningSSV, MethodOfSteps(BS3()))#abstol,reltol
 plot(sol)
+plot(sol(tspan[2]-2*T .+ (0:T/200:T)))
 
 
 function longerm_sim_fix_pint(dp, p)
@@ -101,48 +102,60 @@ vfix_simulation = longerm_sim_fix_pint(dpdp, dpdp.DDEdynProblem.p)
 vfix_simulation = longerm_sim_fix_pint(dpdp, [ζ, ωn, k, OMrel, RVA, RVF, f0])
 muaff, s0aff = affine(dpdp; p=[ζ, ωn, k, OMrel, RVA, RVF, f0]);
 
+
+scatter(1:size(muaff[1],1),log.(abs.(muaff[1])))
+
+scatter(muaff[1])
+plot!(sin.(0:0.01:2pi),cos.(0:0.01:2pi))
+
+
 plot(getindex.(vfix_simulation, [1]))
 plot!(getindex.(vfix_simulation, [2]))
-plot(real.(getindex.(s0aff, [1])))
+plot!(real.(getindex.(s0aff, [1])))
 plot!(real.(getindex.(s0aff, [2])))
+
 maximum(abs.(getindex.(vfix_simulation, 1)))
 maximum(abs.(getindex.(s0aff, 1)))
 
 
 
 println("----------Start brute-force---------------")
-OMv = 1.2:-0.01:0.2
-kv = -1.0:0.01:1.0
+OMv = 0.2001:0.01:1.8
+OMv = 0.2001:0.005:0.6
+kv = -0.0001:0.05:0.6
 Aaff = zeros(size(kv, 1), size(OMv, 1))
 Spek_aff = zeros(size(kv, 1), size(OMv, 1))
 
-RVA = 0.0;
-RVF = 1.0;
-#Threads.@threads 
-@time for j in 1:size(OMv, 1)
-    OMrel = OMv[j]
-    Nstep = 300
+
+
+
+
+
+
+using MDBM
+kv = -0.0001:0.05:0.4
+ax1=Axis(0.2001:0.05:0.6,"OM") # initial grid in x direction
+ax2=Axis(-0.0001:0.1:0.4,"k") # initial grid in y direction
+
+RVA = 0.2;
+RVF = 1/5;#1.0;
+function fooTurningSSV(OMrel, k)
     τmax = 2pi / OMrel * (1.0 + RVA) + 0.1
     T = 2pi / OMrel / RVF
-    dpdp = dynamic_problemSampled(probTurningSSV, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=2, zerofixpont=false)
+    dpdploc = dynamic_problemSampled(probTurningSSV, MethodOfSteps(BS3()), τmax, T;
+     dt=0.1,Historyresolution=50, eigN=1, zerofixpont=false)
 
-    Threads.@threads  for i in 1:size(kv, 1)
-        # println([i,j])
-        k = kv[i]
-        p = (ζ, ωn, k, OMrel, RVA, RVF, f0)
-        muaff, s0aff = affine(dpdp; p=(ζ, ωn, k, OMrel, RVA, RVF, 0.0))
-        Aaff[i, j] = norm(getindex.(s0aff, 1))
-        # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1)))
-        Spek_aff[i, j] = maximum(abs.(muaff[1]))
-    end
+    ABSmuMax=spectralradius(dpdploc;  p = (ζ, ωn, k, OMrel, RVA, RVF, 0.0));
+    return ABSmuMax-1.0
 end
+mymdbm=MDBM_Problem(fooTurningSSV,[ax1,ax2])
+iteration=3#number of refinements (resolution doubling)
+@time MDBM.solve!(mymdbm,iteration)
+#points where the function foo was evaluated
+x_eval,y_eval=getevaluatedpoints(mymdbm)
+#interpolated points of the solution (approximately where foo(x,y) == 0 and c(x,y)>0)
+x_sol,y_sol=getinterpolatedsolution(mymdbm)
+#scatter(x_eval,y_eval,markersize=1)
+#scatter!(x_sol,y_sol,markersize=3)
+scatter(x_sol,y_sol,markersize=1)
 
-
-Aaffsat = deepcopy(Aaff);
-Aaffsat[Spek_aff.>1.0] .= 0.0;
-heatmap(OMv, kv, log.(Aaffsat))
-
-
-Spek_affsat = deepcopy(Spek_aff);
-Spek_affsat[Spek_affsat.>1.0] .= 0.0;
-heatmap(OMv, kv, log.(Spek_affsat))

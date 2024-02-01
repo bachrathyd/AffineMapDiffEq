@@ -17,19 +17,18 @@ end
 ###u0=[SA[10,20],SA[1.0,2.0],4.0,2]
 ##x=[1.0,2.0]
 ##srand=randsimilar(x,4)
-function randsimilar(x::AbstractArray,N::Int)::Vector{typeof(x)}
-        xrand=[randsimilar(xi,N) for xi in x]
+function randsimilar(x::AbstractArray, N::Int)::Vector{typeof(x)}
+    xrand = [randsimilar(xi, N) for xi in x]
 end
-function randsimilar(x::SVector,N::Int)::Vector{typeof(x)}
-    xrand=rand(typeof(x),N)
+function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
+    xrand = rand(typeof(x), N)
 end
 
 function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
     #s_start=[dp.DDEdynProblem.u0 for _ in 1:Nstep] #TODO:fill!!!
-    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) 
- 
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
 
     #randsimilar!(s_start)
     #EIGEN BASED
@@ -38,10 +37,10 @@ function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     # # vals, vecs, info = eigsolve(...) 
 
     #ISSI BASED
-    mus = issi_eigen(dp::dynamic_problemSampled,p=p)
-    
+    #mus = issi_eigen(dp::dynamic_problemSampled,p=p)
+
     #SCHUR BASED
-    # mus = getindex(schursolve(s -> LinMap(dp, s ; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])  
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
     # mus =  getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM,KrylovKit.Arnoldi()),[3,2,1])
     # T, vecs, vals, info = schursolve(...) with
 
@@ -70,11 +69,11 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
 
-    mus = issi_eigen(dp::dynamic_problemSampled,p=p)
+    #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
     #TODO: schursolve
-
+    #println(size(mus[1],1))
     s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
 
 
@@ -107,15 +106,16 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
     dt = dp.dt
 
-    ### #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
-    ### itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-    ### #itp = interpolate(s, BSpline(Linear()))
-    ### Hist_interp_linear = scale(itp, StateSmaplingTime)
-    ### #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-    ### #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-    ### hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
-    ### #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
-    ###
+     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
+     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+     #itp = interpolate(s, BSpline(Linear()))
+     Hist_interp_linear = scale(itp, StateSmaplingTime)
+     #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+     #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
+     hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
+     hint(p,t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
+     #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
+    
 
     NewTimePoints = StateSmaplingTime .+ dp.Tperiod
     #####TODO: ez miért lassabb
@@ -129,10 +129,13 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     ##return v
 
 
-    hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
+    #hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+  ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
+  #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
+  ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
 
     #    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg;verbose=false, abstol=1e-10,reltol=1e-10)#, save_everystep=false)#abstol,reltol
 
@@ -194,11 +197,11 @@ function issi_eigen(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     ## if dp.zerofixpont
     ##     v0=s0
     ## else
-        v0 = LinMap(dp, s0; p=p)
+    v0 = LinMap(dp, s0; p=p)
     ## end
     S = [rand(typeof(dp.DDEdynProblem.u0), Nstep) for _ in 1:dp.eigN]
-    H=zeros(Float64,dp.eigN,dp.eigN)#For Schur based calculation onlyS
-    for _ in 1:6
+    H = zeros(Float64, dp.eigN, dp.eigN)#For Schur based calculation onlyS
+    for _ in 1:12
         #V = [LinMap(dp, Si; p=p) for Si in S]
         V = [LinMap(dp, Si + s0; p=p) - v0 for Si in S] #TODO: ez nem jó, mert 
         StS = [S[i]' * S[j] for i in 1:size(S, 1), j in 1:size(S, 1)]
@@ -213,9 +216,9 @@ function issi_eigen(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
         S .= S ./ norm.(S)
         #norm.(S)
 
-        
+
     end
-    Eigvals=eigvals(H)
+    Eigvals = eigvals(H)
     p = sortperm(Eigvals, by=abs, rev=true)
 
     return Eigvals[p], S[p]

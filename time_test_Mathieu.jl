@@ -104,17 +104,17 @@ YLABEL="Mu error"
 #YLABEL="T-mean [s]"
 
 #plot(Xax2plot,Tmean,grid=true,yerror=Tstd)
-plot(Xax2plot, Yax2plot, grid=false, ribbon=Tstd, fillalpha=0.5,
+plot(Xax2plot, Yax2plot, grid=false,  fillalpha=0.5,
     label=false, yaxis=:log10, xaxis=:log10, color=:red)
 
-for kC in (10.0 .^ (-22:20))
+for kC in (10.0 .^ (-12:10))
     list=[1e-20,1e20]
     plot!(list, kC .* list .^(-0.3333), label=false, yaxis=:log10, xaxis=:log10)
     #plot!(list, kC .* list .^(-2.0), label=false, yaxis=:log10, xaxis=:log10)
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
 end
-p=plot!(Xax2plot, Yax2plot, color=:red, marker=(:circle, 3, 1.0), label="T-non-smooth",
+p=plot!(Xax2plot, Yax2plot, color=:red, marker=(:circle, 3, 1.0), label="T-smooth",
     xlabel=XLABEL, ylabel=YLABEL, yaxis=:log10, xaxis=:log10,
     linewidth=3,
     xticks=10.0 .^ (-20:1.0:20), yticks=10.0 .^ (-20:1.0:20),
@@ -128,4 +128,4 @@ p=plot!(Xax2plot, Yax2plot, color=:red, marker=(:circle, 3, 1.0), label="T-non-s
   #  display(plt), gui()
    default(show = true)
 #savefig(p, "smooth_non_smooth_Mathieu__fix_Timestep.png")
-savefig("smooth_non_smooth_Mathieu__fix_Timestep.png") 
+#savefig("smooth_non_smooth_Mathieu__fix_Timestep.png") 
