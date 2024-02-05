@@ -44,7 +44,7 @@ function DelayMathieu(u, h, p, t)
     SA[dx, ddx]
 end
 Base.:+(a::SVector, b::Bool) = a .+ b
-Base.:+(a::SVector, b::Float64) = a .+ b
+Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
 
 
 ##<<<<<<<<<<< Lin Map based on
@@ -78,6 +78,7 @@ dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
 
 # fix point by affine map
 muaff, s0aff = affine(dpdp; p=p);
+
 plot(log.(abs.(muaff[1])))
 
 scatter(muaff[1])

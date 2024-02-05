@@ -61,26 +61,28 @@ end
 
 
 function partialpart(xSA::SVector)
-    bb=[x.partials[1] for x in xSA]
+    bb = [x.partials[1] for x in xSA]
     return SA[bb...]
 end
+
 function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
-    #s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
-    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * 0.0001
-
-    one_espilon_Dual=ForwardDiff.Dual{Float64}(0.0, 1.0)
     
-    println("Dual perturbation")
-    TheMapping(s)= partialpart.(LinMap(dp, s* one_espilon_Dual + s0; p=p) - v0)
+   # # println("Float perturbation")
+   # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * EPSI_TODO_REMOVE
+   # TheMapping(s)= LinMap(dp, s + s0; p=p) - v0
     
-    #println("Float perturbation")
-    #TheMapping(s)= (LinMap(dp, s + s0; p=p) - v0)
 
-   # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
+    #println("Dual perturbation - it seems to be fater! ;-)")
+    one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) 
+    TheMapping(s) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)
+
+
+    # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
 
     #println(norm(s0-v0))
@@ -112,13 +114,21 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #return mus[1]::Vector{ComplexF64}
     return mus, s0
 end
+
 function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     Nstep = size(dp.StateSmaplingTime, 1)
-    #s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
-    s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
-    affine(dp, s0; p=p)
+    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    #s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+    ##affine(dp, s0; p=p)
+    muSFix = affine(dp, s0; p=p)
+    for _ in 1:2 #TODO: ezt valahogy vizsgálni kellene valami norma alapján...
+        muSFix = affine(dp, muSFix[2]; p=p)
+    end
+    return affine(dp, muSFix[2]; p=p)
+
 end
+
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
@@ -127,16 +137,16 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
     dt = dp.dt
 
-     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
-     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-     #itp = interpolate(s, BSpline(Linear()))
-     Hist_interp_linear = scale(itp, StateSmaplingTime)
-     #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-     #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-     hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
-     hint(p,t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
-     #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
-    
+    #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
+    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+    #itp = interpolate(s, BSpline(Linear()))
+    Hist_interp_linear = scale(itp, StateSmaplingTime)
+    #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+    #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
+    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
+    hint(p, t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
+    #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
+
 
     NewTimePoints = StateSmaplingTime .+ dp.Tperiod
     #####TODO: ez miért lassabb
@@ -154,9 +164,9 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
-  ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
-  #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
-  ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
+    #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
+    ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
 
     #    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg;verbose=false, abstol=1e-10,reltol=1e-10)#, save_everystep=false)#abstol,reltol
 
