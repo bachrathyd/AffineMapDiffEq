@@ -19,7 +19,7 @@ function DelayMathieu(u, h, p, t)
     ζ, δ, ϵ, b, τ , T = p
     dx = u[2]
     ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] 
-    [dx, ddx]
+    SA[dx, ddx]
 end
 
 Base.rand(x::Vector{T}) where T = rand(T,size(x,1))

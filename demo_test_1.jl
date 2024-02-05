@@ -1,4 +1,4 @@
-
+5+5
 using Revise
 #includet("src\\DDE_mapping.jl")
 includet("src\\DDE_mapping_types.jl")
@@ -25,9 +25,7 @@ function delayed_turning_STATIC(u, h, p, t)
     #tau = τ
 
     ddx = f0*mod(t,0.5) - 2 * ζ * u[2] - ωn * u[1] + k * (cos(2 * pi * t) * 0.0 + 1.0) * (f0 * cos(2 * pi * t) + u[1] - h(p, t - tau)[1])  # Surface regeneration effect
-    #ddx = -2 * ζ * u[2] - ωn * u[1] + k * ( u[1] - h(p, t - τ)[1])  # Surface regeneration effect
 
-    # Update the derivative vector
     SA[dx, ddx]
 end
 
@@ -36,7 +34,7 @@ end
 u0 = SA[0.0, 0.0]
 ζ = 0.2          # damping coefficient
 ωn = 2.0#0.2          # nat. freq
-k = 0.45#4#5#8;#5         # cut.coeff
+k = 0.85#4#5#8;#5         # cut.coeff
 τ = 2.4          # Time delay
 f0 = 1.0         # excitation
 p = [ζ, ωn, k, τ, f0]
@@ -58,9 +56,9 @@ plot(sol)
 plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 
 Nstep = 150
-τmax = 8.2
+τmax = 4.8
 dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax,
- T; Historyresolution=Nstep, eigN=4, zerofixpont=true);
+ T; Historyresolution=Nstep, eigN=10, zerofixpont=true);
 
 
 ## fix point by simulation
@@ -119,16 +117,6 @@ using PProf
 #Profile.Allocs.@profile sample_rate=1  affine(dpdp; p=p)
 #PProf.Allocs.pprof(from_c=false)
 #Profile.take_heap_snapshot("snapshot.heapsnapshot")
-
-
-
-
-
-
-
-
-
-
 
 
 

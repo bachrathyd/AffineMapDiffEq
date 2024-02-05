@@ -24,11 +24,13 @@ function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
     xrand = rand(typeof(x), N)
 end
 
+
 function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
     #s_start=[dp.DDEdynProblem.u0 for _ in 1:Nstep] #TODO:fill!!!
     s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+
 
     #randsimilar!(s_start)
     #EIGEN BASED
@@ -54,22 +56,41 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
         return Float64(maximum(abs.(affine(dp; p=p)[1][1])))::Float64
     end
 end
+
+
+
+
+function partialpart(xSA::SVector)
+    bb=[x.partials[1] for x in xSA]
+    return SA[bb...]
+end
 function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
+    #s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
     s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * 0.0001
+
+    one_espilon_Dual=ForwardDiff.Dual{Float64}(0.0, 1.0)
+    
+    println("Dual perturbation")
+    TheMapping(s)= partialpart.(LinMap(dp, s* one_espilon_Dual + s0; p=p) - v0)
+    
+    #println("Float perturbation")
+    #TheMapping(s)= (LinMap(dp, s + s0; p=p) - v0)
+
+   # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
 
     #println(norm(s0-v0))
-    ####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
-    #####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+    ####mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
+    #####mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
 
-    #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
-    #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
+    mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
 
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
     #TODO: schursolve
@@ -79,10 +100,10 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
 
     ###println(norm(s0 - LinMap(dp, s0; p=p)))
     #TODO: it might be better to incluse the mus calcluations here too
-    for k_fix_iteration in 1:40
+    for k_fix_iteration in 1:40  #TODO:use input parameters for this with default value
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
         normerror = norm(s0 - LinMap(dp, s0; p=p))
-        if (normerror) < 1e-5
+        if (normerror) < 1e-5 #TODO:use input parameters for this with default value
             # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
         end

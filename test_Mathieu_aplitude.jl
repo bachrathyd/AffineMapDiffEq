@@ -44,6 +44,7 @@ function DelayMathieu(u, h, p, t)
     SA[dx, ddx]
 end
 Base.:+(a::SVector, b::Bool) = a .+ b
+Base.:+(a::SVector, b::Float64) = a .+ b
 
 
 ##<<<<<<<<<<< Lin Map based on
@@ -88,7 +89,8 @@ plot!(getindex.(s0aff,2))
 
 
 
-println("----------Start brute-force---------------")
+
+
 δv=0:0.051:10 # initial grid in x direction
 bv=-1.501:0.05:1.5 # initial grid in y direction
 Aaff=zeros(size(bv,1),size(δv,1))
