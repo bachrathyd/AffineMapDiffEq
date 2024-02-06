@@ -1,11 +1,12 @@
-function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4, zerofixpont=true, dt=maxdelay / Historyresolution)
+function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
+    zerofixpont=true, dt=maxdelay / Historyresolution,affineinteration=1)
     StateSmaplingTime = LinRange(-maxdelay, Float64(0.0), Historyresolution)#TODO: Float64!!!
     eigs = zeros(ComplexF64, eigN)
     #eigsA = Vector{Vector{ComplexF64}}(undef,eigN)
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont,affineinteration)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.DDEdynProblem, kwargs...)
@@ -85,9 +86,9 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
 
-    #println(norm(s0-v0))
-    ####mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
-    #####mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+    ## #println(norm(s0-v0))
+    ## mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
+    ## ###mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
 
     #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
@@ -121,11 +122,11 @@ function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
     #s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
     ##affine(dp, s0; p=p)
-    muSFix = affine(dp, s0; p=p)
-    for _ in 1:2 #TODO: ezt valahogy vizsgálni kellene valami norma alapján...
+    muSFix = affine(dp, s0; p=p)#First iteration
+    for _ in 2:dp.affineinteration #secondary interation
         muSFix = affine(dp, muSFix[2]; p=p)
     end
-    return affine(dp, muSFix[2]; p=p)
+    return muSFix
 
 end
 

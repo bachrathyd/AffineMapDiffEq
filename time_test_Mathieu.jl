@@ -31,7 +31,7 @@ end
 Base.:+(a::SVector, b::Bool) = a .+ b
 
 
-##<<<<<<<<<<< Lin Map based on
+##<<<<<<<<<<< Lin Map based
 NF=Float64
 ζ = NF(0.02)          # damping coefficient
 δ = NF(1.5)#0.2          
@@ -63,7 +63,8 @@ the_alg=MethodOfSteps(RK4())
 #the_alg=MethodOfSteps(Tsit5())
 τmax = 2pi + 0.1
 #dpdp_Time = dynamic_problemSampled(probMathieu, the_alg, τmax, T; Historyresolution=maximum(Nstepv) * 100, eigN=1, zerofixpont=true)
-dpdp_Time = dynamic_problemSampled(probMathieu, the_alg, τmax, T; Historyresolution=maximum(Nstepv) * 10, eigN=1, zerofixpont=true)
+dpdp_Time = dynamic_problemSampled(probMathieu, the_alg, τmax, T; 
+Historyresolution=maximum(Nstepv) * 10, eigN=1, zerofixpont=false)
 @time mumaxFINE = spectralradius(dpdp_Time; p=p)
 for kk in 1:size(Nstepv, 1)
     runpercent = kk / size(Nstepv, 1) * 100
@@ -88,12 +89,12 @@ for kk in 1:size(Nstepv, 1)
     println(" <<<<<<< ")
 end
 
-Xax2plot = Nstepv
-XLABEL="resolution [1]"
+#Xax2plot = Nstepv
+#XLABEL="resolution [1]"
 #Xax2plot=mumaxVec_error
 #XLABEL="Mu error"
-# = Tmean
-#XLABEL="T-mean [s]"
+ Xax2plot= Tmean
+XLABEL="T-mean [s]"
 
 
 Yax2plot=mumaxVec_error
@@ -104,8 +105,8 @@ YLABEL="Mu error"
 #YLABEL="T-mean [s]"
 
 #plot(Xax2plot,Tmean,grid=true,yerror=Tstd)
-plot(Xax2plot, Yax2plot, grid=false,  fillalpha=0.5,
-    label=false, yaxis=:log10, xaxis=:log10, color=:red)
+plot!(Xax2plot, Yax2plot, grid=false,  fillalpha=0.5,
+    label=false, yaxis=:log10, xaxis=:log10, color=:green)
 
 for kC in (10.0 .^ (-12:10))
     list=[1e-20,1e20]
@@ -114,7 +115,7 @@ for kC in (10.0 .^ (-12:10))
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
 end
-p=plot!(Xax2plot, Yax2plot, color=:red, marker=(:circle, 3, 1.0), label="T-smooth",
+p=plot!(Xax2plot, Yax2plot, color=:green, marker=(:circle, 3, 1.0), label="T-smooth",
     xlabel=XLABEL, ylabel=YLABEL, yaxis=:log10, xaxis=:log10,
     linewidth=3,
     xticks=10.0 .^ (-20:1.0:20), yticks=10.0 .^ (-20:1.0:20),

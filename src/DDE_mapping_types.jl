@@ -31,5 +31,6 @@ struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     eigs#::Vector{TCompFloat}
     #eigsA#::Vector{Vector{TCompFloat}}
     zerofixpont#::Bool
+    affineinteration::Int#::Bool
     #fixpont
 end

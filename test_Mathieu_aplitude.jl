@@ -89,8 +89,12 @@ plot(getindex.(s0aff,1))
 plot!(getindex.(s0aff,2))
 
 
+#------------------ Norm color, and spectral radius - BRUTE FORCE -----------------
 
-
+Nstep = 50
+τmax = NF(2pi+0.1)
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
+ T; Historyresolution=Nstep, eigN=2, zerofixpont=false);
 
 δv=0:0.051:10 # initial grid in x direction
 bv=-1.501:0.05:1.5 # initial grid in y direction
@@ -101,13 +105,13 @@ Spek_aff=zeros(size(bv,1),size(δv,1))
     @inbounds  δ = δv[j]
       Threads.@threads for i in 1:size(bv, 1)
         @inbounds  b = bv[i]
+       # muaff, s0aff = affine(dpdp; p=(ζ, δ, ϵ, b, τ, T))
         muaff, s0aff = affine(dpdp; p=(ζ, δ, ϵ, b, τ, T))
         Aaff[i, j] = norm(getindex.(s0aff, 1))
         # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1)))
         Spek_aff[i, j] = maximum(abs.(muaff[1]))
     end
 end
-
 
 
 Aaffsat=deepcopy(Aaff);
@@ -121,6 +125,7 @@ Spek_affsat=deepcopy(Spek_aff);
 Spek_affsat[Spek_affsat .> 1.0] .= 0.0;
 heatmap(δv,bv,log.(Spek_affsat))
 
+#------------------ Stability boundary - MDBM -----------------
 
 
 ax1=Axis(0:2:10,"δ") # initial grid in x direction
