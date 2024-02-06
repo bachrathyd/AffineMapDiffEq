@@ -153,7 +153,7 @@ using MDBM
 ax1 = Axis(0.1:0.2:1.1, "τ") # initial grid in x direction
 ax2 = Axis(-2.5:0.2:2.5, "κ2") # initial grid in y direction
 function fooMathieu(τ, κ2)
-    τmax = τ + 0.1
+    τmax = (τ + 0.1)*1.2
     Nstep=20
     dploc = dynamic_problemSampled(probrobot_neutral, MethodOfSteps(BS3()), τmax,
     T; Historyresolution=Nstep, eigN=1, zerofixpont=true, dt=0.05)
@@ -181,7 +181,7 @@ Spek = zeros(size(κ2v, 1), size(τv, 1))
 #Threads.@threads
 @time Threads.@threads for j in 1:size(τv, 1)
     τ = τv[j]
-    τmax = τ + 0.1
+    τmax = (τ + 0.1)*1.2
     Nstep=20
     dploc = dynamic_problemSampled(probrobot_neutral, MethodOfSteps(BS3()), τmax,
     T; Historyresolution=Nstep, eigN=1, zerofixpont=true, dt=0.01)

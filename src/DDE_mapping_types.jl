@@ -7,6 +7,9 @@ using StaticArrays
 using LinearAlgebra
 using Interpolations
 
+
+
+using ForwardDiff
 #using Plots
 #PythonPlot()
 #plotlyjs()
@@ -28,5 +31,6 @@ struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     eigs#::Vector{TCompFloat}
     #eigsA#::Vector{Vector{TCompFloat}}
     zerofixpont#::Bool
+    affineinteration::Int#::Bool
     #fixpont
 end

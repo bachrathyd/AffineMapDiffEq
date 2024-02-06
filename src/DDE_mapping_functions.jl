@@ -1,11 +1,12 @@
-function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4, zerofixpont=true, dt=maxdelay / Historyresolution)
+function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
+    zerofixpont=true, dt=maxdelay / Historyresolution,affineinteration=1)
     StateSmaplingTime = LinRange(-maxdelay, Float64(0.0), Historyresolution)#TODO: Float64!!!
     eigs = zeros(ComplexF64, eigN)
     #eigsA = Vector{Vector{ComplexF64}}(undef,eigN)
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont,affineinteration)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.DDEdynProblem, kwargs...)
@@ -24,11 +25,13 @@ function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
     xrand = rand(typeof(x), N)
 end
 
+
 function spectrum(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
     #s_start=[dp.DDEdynProblem.u0 for _ in 1:Nstep] #TODO:fill!!!
     s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+
 
     #randsimilar!(s_start)
     #EIGEN BASED
@@ -54,22 +57,43 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
         return Float64(maximum(abs.(affine(dp; p=p)[1][1])))::Float64
     end
 end
+
+
+
+
+function partialpart(xSA::SVector)
+    bb = [x.partials[1] for x in xSA]
+    return SA[bb...]
+end
+
 function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
-    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * 0.0001
+    
+   # # println("Float perturbation")
+   # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * EPSI_TODO_REMOVE
+   # TheMapping(s)= LinMap(dp, s + s0; p=p) - v0
+    
+
+    #println("Dual perturbation - it seems to be fater! ;-)")
+    one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) 
+    TheMapping(s) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)
 
 
-    #println(norm(s0-v0))
-    ####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM)
-    #####mus = eigsolve(s -> LinMap(dp, s + s0; p=p) - v0, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+    # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
-    #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
-    #mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
-    mus = getindex(schursolve(s -> LinMap(dp, s + s0; p=p) - v0, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
+    ## #println(norm(s0-v0))
+    ## mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
+    ## ###mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
+
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
+    mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-12, verbosity=0)), [3, 2, 1])
 
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
     #TODO: schursolve
@@ -79,10 +103,10 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
 
     ###println(norm(s0 - LinMap(dp, s0; p=p)))
     #TODO: it might be better to incluse the mus calcluations here too
-    for k_fix_iteration in 1:40
+    for k_fix_iteration in 1:40  #TODO:use input parameters for this with default value
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
         normerror = norm(s0 - LinMap(dp, s0; p=p))
-        if (normerror) < 1e-5
+        if (normerror) < 1e-5 #TODO:use input parameters for this with default value
             # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
         end
@@ -91,13 +115,21 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #return mus[1]::Vector{ComplexF64}
     return mus, s0
 end
+
 function affine(dp::dynamic_problemSampled; p=dp.DDEdynProblem.p)
     #TODO: fixed dimension problem!!!!
     Nstep = size(dp.StateSmaplingTime, 1)
-    #s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
-    s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
-    affine(dp, s0; p=p)
+    s0 = zeros(typeof(dp.DDEdynProblem.u0), Nstep)
+    #s0 = rand(typeof(dp.DDEdynProblem.u0), Nstep)
+    ##affine(dp, s0; p=p)
+    muSFix = affine(dp, s0; p=p)#First iteration
+    for _ in 2:dp.affineinteration #secondary interation
+        muSFix = affine(dp, muSFix[2]; p=p)
+    end
+    return muSFix
+
 end
+
 function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
 
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
@@ -106,16 +138,16 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
     dt = dp.dt
 
-     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
-     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-     #itp = interpolate(s, BSpline(Linear()))
-     Hist_interp_linear = scale(itp, StateSmaplingTime)
-     #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-     #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-     hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
-     hint(p,t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
-     #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
-    
+    #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
+    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+    #itp = interpolate(s, BSpline(Linear()))
+    Hist_interp_linear = scale(itp, StateSmaplingTime)
+    #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+    #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
+    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
+    hint(p, t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
+    #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
+
 
     NewTimePoints = StateSmaplingTime .+ dp.Tperiod
     #####TODO: ez miért lassabb
@@ -133,9 +165,9 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
-  ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
-  #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
-  ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
+    #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
+    ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
 
     #    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg;verbose=false, abstol=1e-10,reltol=1e-10)#, save_everystep=false)#abstol,reltol
 
