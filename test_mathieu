@@ -32,7 +32,9 @@ end
 function DelayMathieu(u, h, p, t)
     ζ, δ, ϵ, b, τ , ν, T = p
     dx = u[2]
-    ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] + ν*h(p, t - τ, Val{1})[2]
+    #ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] # Traditional Delayed Mathieu equation
+    #sign
+    ddx = [-(δ+ϵ*(cos(t))), -2*ζ]' * u + b * h(p, t - τ)[1] + ν*h(p, t - τ, Val{1})[2]#The last pert is a test for neutral system
     SA[dx, ddx]
 end
 
@@ -62,7 +64,7 @@ plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 Base.:+(a::SVector, b::Bool) = a .+ b
 
 
-Nstep = 100
+Nstep = 50
 τmax = 2pi+0.1
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=50, zerofixpont=true);
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
@@ -113,10 +115,11 @@ BenchmarkTools.std(t).time
 
 using MDBM
 
-ax1=Axis(-1:0.5:5,"δ") # initial grid in x direction
-ax2=Axis(0.0:1.0:8.0,"ϵ") # initial grid in y direction
+ax1=Axis(-1:0.5:15,"δ") # initial grid in x direction
+ax2=Axis(0.0:1.0:15.0,"ϵ") # initial grid in y direction
 b=0.00
-ν=0.05;0.0
+ν=0.00;0.0
+ζ = 0.0001  
 function fooMathieu(δ, ϵ)
     ABSmuMax=spectralradius(dpdp;  p = (ζ, δ, ϵ, b, τ , ν, T ));
     return ABSmuMax-1.0
@@ -130,7 +133,7 @@ x_eval,y_eval=getevaluatedpoints(mymdbm)
 x_sol,y_sol=getinterpolatedsolution(mymdbm)
 #scatter(x_eval,y_eval,markersize=1)
 #scatter!(x_sol,y_sol,markersize=3)
-scatter!(x_sol,y_sol,markersize=1)
+scatter(x_sol,y_sol,markersize=2)
 
 
 
