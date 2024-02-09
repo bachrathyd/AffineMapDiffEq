@@ -15,19 +15,19 @@ function delayed_turning_STATIC(u, h, p, t)
     # Parameters
     ζ, ωn, k, T, f0 = p
     τ=T
-    if t/T<0.4
+    if mod(t/T,2.0*pi)<0.4
         h0=f0*sin(2.0*pi*t/T)
     else
         h0=0.0;
     end
    # tau=τ*(1.0-0.2*cos( 2 * pi  * 2*t/1.0) )
-   tau = τ
+    tau = τ
 
     dx = u[2]
 
 
     # ddx = - 2 * ζ * u[2] - ωn * u[1] + k * (cos(2 * pi * t) * 0.0 + 1.0) * abs.(f0 * cos(2 * pi * t/tau) + u[1] - h(p, t - tau)[1])^0.75  # Surface regeneration effect
-    ddx = -2 * ζ * u[2] - ωn *( u[1]+0.2*u[1]^2) + k * abs.(h0 + u[1] - h(p, t - tau)[1])^0.75  # Surface regeneration effect
+    ddx = -2 * ζ * u[2] - ωn *( u[1]+0.0*u[1]^2) + k * abs.(h0 + u[1] - h(p, t - tau)[1])#^0.75  # Surface regeneration effect
     #ddx = -2 * ζ * u[2] - ωn * u[1] + k * ( u[1] - h(p, t - τ)[1])  # Surface regeneration effect
 
     # Update the derivative vector
@@ -42,14 +42,16 @@ u0 = SA[0.0, 0.0]
 ζ = 0.2          # damping coefficient
 ωn = 2.0#0.2          # nat. freq
 k = 0.45#4#5#8;#5         # cut.coeff
-τ = 2.4          # Time delay
+
 f0 = 1.0         # excitation
+
+T=2
 
 p = [ζ, ωn, k, T, f0]
 p0 = [ζ, ωn, k, T, 0.0]
 
 
-tspan = (0.0, T * 400.0)
+tspan = (0.0, T * 1400.0)
 
 h(p, t) = SA[0.0; 0.0]
 probTurning = DDEProblem(delayed_turning_STATIC, u0, h, tspan, p; constant_lags=[τ])
@@ -57,7 +59,7 @@ probTurning = DDEProblem(delayed_turning_STATIC, u0, h, tspan, p; constant_lags=
 #StateSmaplingTime = LinRange(-τ, 0.0, 200) .+ T
 sol = solve(probTurning, MethodOfSteps(BS3()))#abstol,reltol
 plot(sol)
-plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
+plot(sol(sol.t[end] .- (0.0:0.01:τ*10.0)))
 
 function longerm_sim_fix_pint(dp,p)
     #solve(prob,RK4();dt=0.005,adaptive=false)
@@ -79,7 +81,7 @@ function longerm_sim_fix_pint(dp,p)
 end
 
 
-Nstep = 150
+Nstep = 250
 τmax = 3.0
 dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
 
@@ -88,8 +90,8 @@ vfix_simulation=longerm_sim_fix_pint(dpdp,dpdp.DDEdynProblem.p)
 
 
 
-tauv=4:0.5:28.0
-kv=-1.5:0.1:1.5
+tauv=4:4:28.0
+kv=-1.5:0.021:1.5
 
 #tauv=4:1.5:28.0
 #kv=-1.5:0.3:1.5
@@ -99,6 +101,7 @@ Aaff=zeros(size(kv,1),size(tauv,1))
 Spek_aff=zeros(size(kv,1),size(tauv,1))
 
 vfix_simulation=longerm_sim_fix_pint(dpdp,[ζ, ωn, k, τ, f0])
+
 muaff,s0aff=affine(dpdp; p= [ζ, ωn, k, τ, f0]);
 
 plot(getindex.(vfix_simulation,[1]))
@@ -118,7 +121,7 @@ for (j, tau) in enumerate(tauv)
     
     T = tau
 
-    dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=4, zerofixpont=true);
+    dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
     τ=tau
     for (i,k) in enumerate(kv)
     #vfix_simulation=longerm_sim_fix_pint(dpdp,[ζ, ωn, k, τ, f0])
@@ -133,10 +136,10 @@ for (j, tau) in enumerate(tauv)
 end
 
 
-plot(Aaffsat[:,15])
-#plot!(Asim[:,15])
-plot!(Aaffsat[:,5])
-#plot!(Asim[:,5])
+##plot(Aaffsat[:,15])
+###plot!(Asim[:,15])
+##plot!(Aaffsat[:,5])
+###plot!(Asim[:,5])
 
 #Asim[Asim .> 0.99 ] .= 00.0;
 #heatmap(tauv,kv,log.(Asim))
@@ -151,3 +154,5 @@ Spek_affsat=deepcopy(Spek_aff);
 Spek_affsat[Spek_affsat .> 1.0] .= 0.0;
 heatmap(tauv,kv,(Spek_affsat))
 
+
+plot(Spek_affsat[:,1])
