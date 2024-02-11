@@ -88,21 +88,26 @@ using MDBM
 
 #ax1 = Axis(-0.009:0.01:0.0005, "τf") # initial grid in x direction
 #ax2 = Axis(-0.5:0.25:0.5, "K") # initial grid in y direction
-ax1 = Axis(LinRange(-0.009,0.00004,5), "τf") # initial grid in x direction
-ax2 = Axis(LinRange(-0.5,0.5,6), "K") # initial grid in y direction
+ax1 = Axis(LinRange(-0.008,0.015,5), "τf") # initial grid in x direction
+ax2 = Axis(LinRange(-0.5,0.504,6), "K") # initial grid in y direction
 function fooMathieu(τf, K)
     τmax = maximum([τr,τr + τf]) * 1.2
-    Nstep = 40
+    Nstep = 500
     dploc = dynamic_problemSampled(pro_BD_Enoc, MethodOfSteps(BS3()), τmax,
-        T; Historyresolution=Nstep, eigN=3, zerofixpont=true, dt=0.001)
-    w(t) = K
-    println((τf, K))
+        T; Historyresolution=Nstep, eigN=2, zerofixpont=true, dt=0.001)
+    w(θ) = K
+    #println((τf, K))
     mu, saff = affine(dploc; p=(ωn, τf, τr, w, μ))
-    ABSmuMax = abs(mu[1][1])
+    
+    ABSmuMax = abs(mu[1][1]) ;#abs(mu[1][3])
     return ABSmuMax - 1.0
+    
+    #MuMin1_prod = prod(abs.(mu[1][1:4]) .-1 ) ;#abs(mu[1][3])
+    #return MuMin1_prod#ABSmuMax - 1.0
 end
+
 mymdbm = MDBM_Problem(fooMathieu, [ax1, ax2])
-iteration = 2#number of refinements (resolution doubling)
+iteration = 4#number of refinements (resolution doubling)
 @time MDBM.solve!(mymdbm, iteration)
 #points where the function foo was evaluated
 x_eval, y_eval = getevaluatedpoints(mymdbm)
@@ -110,30 +115,30 @@ x_eval, y_eval = getevaluatedpoints(mymdbm)
 x_sol, y_sol = getinterpolatedsolution(mymdbm)
 #scatter(x_eval,y_eval,markersize=1)
 #scatter!(x_sol,y_sol,markersize=3)
-scatter(x_sol, y_sol, markersize=1)
+scatter(x_sol, y_sol, markersize=2,xlabel="τf", ylabel="K")
 
 
 
 
 println("----------Start brute-force---------------")
-τfv = LinRange(-0.009,0.04,20)#-0.005:0.01:0.1 # initial grid in x direction
+τfv = LinRange(-0.0095,0.015,40)#-0.005:0.01:0.1 # initial grid in x direction
 #τfv = LinRange(0.0001,0.02,30)#-0.005:0.01:0.1 # initial grid in x direction
-Kv = LinRange(-0.5,0.5,20)#-1.0:0.25:1.0 # initial grid in y direction
+Kv = LinRange(-0.5,0.504,40)#-1.0:0.25:1.0 # initial grid in y direction
 Spek = zeros(size(Kv, 1), size(τfv, 1))
 #Threads.@threads
 @time Threads.@threads for j in 1:size(τfv, 1)
     println(j)
     τf = τfv[j]
-    τmax = maximum([τr,τr + τf]) * 1.2
-    Nstep = 40
+    τmax = maximum([τr,τr + τf]) * 1.05
+    Nstep = 500
     dploc = dynamic_problemSampled(pro_BD_Enoc, MethodOfSteps(BS3()), τmax,
-        T; Historyresolution=Nstep, eigN=4, zerofixpont=true, dt=0.005)
+        T; Historyresolution=Nstep, eigN=3, zerofixpont=true, dt=0.001)
     #@time 
     Threads.@threads for i in 1:size(Kv, 1)
         K = Kv[i]
-        w(t) = K
+        w(θ) = K
         mu, saff = affine(dploc; p=(ωn, τf, τr, w, μ))
-        muMAX = abs(mu[1][3])
+        muMAX = abs(mu[1][1])
         #muMAX = spectralradius(dploc; p=(ωn, τf, τr, w, μ))
         Spek[i, j] = muMAX
     end
@@ -143,7 +148,7 @@ Spek_sat = deepcopy(Spek);
 Spek_sat[Spek_sat.>1.0] .= 1.0;
 heatmap(τfv, Kv, (Spek_sat),xlabel="τf", ylabel="K")
 
-scatter!(x_sol, y_sol, color=:blue, markersize=3)
+scatter!(x_sol, y_sol, color=:blue, markersize=2)
 
 
 

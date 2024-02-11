@@ -1,12 +1,12 @@
 function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
-    zerofixpont=true, dt=maxdelay / Historyresolution,affineinteration=1)
+    zerofixpont=true, dt=maxdelay / Historyresolution, affineinteration=1)
     StateSmaplingTime = LinRange(-maxdelay, Float64(0.0), Historyresolution)#TODO: Float64!!!
     eigs = zeros(ComplexF64, eigN)
     #eigsA = Vector{Vector{ComplexF64}}(undef,eigN)
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont,affineinteration)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN, eigs, zerofixpont, affineinteration)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.DDEdynProblem, kwargs...)
@@ -71,17 +71,18 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
-    
-   # # println("Float perturbation")
-   # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * EPSI_TODO_REMOVE
-   # TheMapping(s)= LinMap(dp, s + s0; p=p) - v0
-    
+    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep)
 
-    #println("Dual perturbation - it seems to be fater! ;-)")
+    TheMapping(s) = LinMap(dp, s + s0; p=p) - v0
+  
     one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
-    s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) 
-    TheMapping(s) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)
-
+    #if true#~DODOAU
+    #    println("Float perturbation")
+    #    s_start .*=  EPSI_TODO_REMOVE
+    #else
+        #println("Dual perturbation - it seems to be faster! ;-)")
+        TheMapping(s) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)
+    #end
 
     # s_start = rand(typeof(dp.DDEdynProblem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
@@ -107,7 +108,7 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
         s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))
         normerror = norm(s0 - LinMap(dp, s0; p=p))
         if (normerror) < 1e-5 #TODO:use input parameters for this with default value
-            # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+            #println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
         end
     end
@@ -164,8 +165,8 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
-#    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    #   sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
