@@ -15,7 +15,7 @@ using DifferentialEquations
 function f_now(p, t)
     ζ, δ, ϵ, b, τ , T  = p
    SA[-(δ+ϵ*     cos(t)), -2*ζ]
-   #SA[-(δ+ϵ*sign(cos(t))), -2*ζ]
+   #SA[-(δ+ϵ*sign(cos(t))), -2*ζ]#Meissner  
 end
 function f_past(p, t)
     ζ, δ, ϵ, b, τ , T  = p
@@ -115,6 +115,7 @@ for kC in (10.0 .^ (-12:10))
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
 end
+
 p=plot!(Xax2plot, Yax2plot, color=:green, marker=(:circle, 3, 1.0), label="T-smooth",
     xlabel=XLABEL, ylabel=YLABEL, yaxis=:log10, xaxis=:log10,
     linewidth=3,

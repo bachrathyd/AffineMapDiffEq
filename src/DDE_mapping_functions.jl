@@ -94,6 +94,7 @@ function affine(dp::dynamic_problemSampled, s0; p=dp.DDEdynProblem.p)
     #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi()),[3,2,1])
+    #TODO: in case of very high tolerance it will use all the krylovdim!!!
     mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN * 1 + 5, tol=1e-22, verbosity=0)), [3, 2, 1])
 
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
@@ -165,8 +166,8 @@ function LinMap(dp::dynamic_problemSampled, s; p=dp.DDEdynProblem.p)# where T
     #hint(p, t) = interpolate_complex_on_grid(s, -dp.maxdelay, dt, t)
     #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
-    #   sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-    sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    #sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
+     sol = solve(remake(dp.DDEdynProblem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.DDEdynProblem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol

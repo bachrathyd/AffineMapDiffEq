@@ -79,15 +79,15 @@ plot(sol)
 
 
 #---------------------- Spectrum test --------------------
-Nstep = 150
-τmax = 2pi + 0.1
+Nstep = 350
+τmax = 2pi 
 dpdp = dynamic_problemSampled(probrobot_neutral, MethodOfSteps(BS3()), τmax,
-    T; Historyresolution=Nstep, eigN=40, zerofixpont=true, dt=0.01);
+    T; Historyresolution=Nstep, eigN=20, zerofixpont=true, dt=0.001);
 
 # fix point by affine map
 @time mu = spectrum(dpdp; p=p);
 plot(log.(abs.(mu[1])))
-scatter(mu[1])
+scatter((mu[1]))
 plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
 spectralradius(dpdp; p=p)
