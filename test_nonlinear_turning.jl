@@ -82,11 +82,11 @@ end
 
 
 Nstep = 250
-τmax = 3.0
+τmax = 8.8
 dpdp = dynamic_problemSampled(probTurning, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
 
 
-vfix_simulation=longerm_sim_fix_pint(dpdp,dpdp.DDEdynProblem.p)
+vfix_simulation=longerm_sim_fix_pint(dpdp,dpdp.Problem.p)
 
 
 

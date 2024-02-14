@@ -93,7 +93,8 @@ end
 #XLABEL="resolution [1]"
 #Xax2plot=mumaxVec_error
 #XLABEL="Mu error"
- Xax2plot= Tmean
+
+Xax2plot= Tmean
 XLABEL="T-mean [s]"
 
 
@@ -105,14 +106,14 @@ YLABEL="Mu error"
 #YLABEL="T-mean [s]"
 
 #plot(Xax2plot,Tmean,grid=true,yerror=Tstd)
-plot!(Xax2plot, Yax2plot, grid=false,  fillalpha=0.5,
+plot(Xax2plot, Yax2plot, grid=false,  fillalpha=0.5,
     label=false, yaxis=:log10, xaxis=:log10, color=:green)
 
-for kC in (10.0 .^ (-12:10))
+for kC in (10.0 .^ (-20:20))
     list=[1e-20,1e20]
     plot!(list, kC .* list .^(-0.3333), label=false, yaxis=:log10, xaxis=:log10)
-    #plot!(list, kC .* list .^(-2.0), label=false, yaxis=:log10, xaxis=:log10)
-    #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
+    plot!(list, kC .* list .^(-3.0), label=false, yaxis=:log10, xaxis=:log10)
+    plot!(list,kC .* list .^1 , label=false,linestyle=:dash)
     #plot!(list,kC .* list .^2 , label=false,linestyle=:dash)
 end
 
@@ -129,5 +130,6 @@ p=plot!(Xax2plot, Yax2plot, color=:green, marker=(:circle, 3, 1.0), label="T-smo
 #p=plot!( xlims=(1e-15,1e2),ylims=(1e-0,1e4))
   #  display(plt), gui()
    default(show = true)
+   default(show = false)
 #savefig(p, "smooth_non_smooth_Mathieu__fix_Timestep.png")
 #savefig("smooth_non_smooth_Mathieu__fix_Timestep.png") 

@@ -13,6 +13,7 @@ using Profile
 using StaticArrays
 using DifferentialEquations
 
+using LaTeXStrings
 
 ##TODO: Bifurcation Analysis in Julia
 
@@ -84,6 +85,7 @@ Nstep = 150
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
     T; Historyresolution=Nstep, eigN=10, zerofixpont=false);
 
+    @benchmark affine($dpdp; p=$p)
 
 muaff, s0aff = affine(dpdp; p=p);
 muaff, s0aff = affine(dpdp, s0aff; p=p);
@@ -107,7 +109,7 @@ plot!(LinRange(-τmax, 0.0, size(s0aff, 1)), getindex.(s0aff, 2))
 
 #------------ Mu test for different resolution 
 #("Float Mapp" or "Dual mapp") test - the source code should be changed inside!!!
-
+println("Ehhez át kell kapcsolni a kódban, mert most hard-coded a választés a két módszer között")  #--> TheMapping(s::T) = (LinMap(dp, s + s0; p=p) - v0)::T
 Nstep = 50
 τmax = 2pi + 0.5
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
@@ -128,9 +130,8 @@ EPSI_TODO_REMOVE = 0.000000001 #TODO: remove this variable!!!!!!!
 muaff, s0aff0000 = affine(dpdp; p=p);
 #plot(log.(abs.(muaff[1])))
 # fix point by affine map
-EPSvpow = -2.0:-0.25:-20.0##-10.0:0.1:0.2
-EPSvpow = -2.0:0.25:2.0
-#EPSvpow=-8.0:0.1:6.0
+EPSvpow = -2.0:-0.25:-20.0##-10.0:0.1:0.2 #Futtatni kell amig le nem fagy, és után a kiplottolni a sikeresen kiszámolt részeket
+#EPSvpow = -2.0:0.25:2.0 #Futtatni kell amig le nem fagy, és után a kiplottolni a sikeresen kiszámolt részeket
 musABS = []
 A = 0.10
 scatter!([], [])
@@ -153,10 +154,10 @@ norm(diff(musABS))
 
 
 #--------------- bifurcation test - "continuation" -------------
-Nstep = 100
+Nstep = 50
 τmax = 2pi + 0.01
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
-    T; Historyresolution=Nstep, eigN=1, zerofixpont=false, affineinteration=3);
+    T; Historyresolution=Nstep, eigN=1, zerofixpont=false, affineinteration=5);
 
 #EPSI_TODO_REMOVE=1e-5
 #TODO: Comaper the Float and Dual Mapp resolution --> result for a jounal
@@ -215,6 +216,6 @@ Aaffsat = deepcopy(Aaff);
 plot(Av, Aaffsat,lab="")
 plot!(Av, Spek_aff,lab="")
 scatter!(Av, Aaffsat, zcolor=3.0 .- sign.(Spek_aff .- 1.0), ylim=(0.0, 2.0),lab="",
-xlabel="A - excitation level", ylabel="max pos. x_{max} /log(μ)")
+xlabel=L"A - excitation level", ylabel=L"x_{max}.  / \mu_1")
 #heatmap(δv,bv,(Aaffsat))
 

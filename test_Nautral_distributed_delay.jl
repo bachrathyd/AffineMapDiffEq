@@ -64,9 +64,8 @@ p = χ, r, γ, μ, κ1, κ2, τ
 #p = (ζ, ωn, k, τ,10.0)
 
 u0 = SA[1.0, 1.0, 1.0, 1.0]
-h(p, t) = SA[1.0, 0.0, 0.0, 0.0]
-h(p, t, deriv::Type{Val{1}}) = SA[0.0, 0.0, 1.0, 0.0]
-
+h(p, t::Float64) = SA[1.0, 0.0, 0.0, 0.0]
+h(p, t::Float64, deriv::Type{Val{1}}) = SA[0.0, 0.0, 1.0, 0.0]
 
 
 probrobot_neutral = DDEProblem(robot_neutral, u0, h, (0.0, T * 1000.0), p; constant_lags=[τ], neutral=true)
@@ -121,8 +120,8 @@ scatter(x_sol, y_sol, markersize=1)
 
 println("----------Start brute-force---------------")
 τv = 0.1:0.02:1.0 # initial grid in x direction
-κ1v = -1.0:0.02:1.0 # initial grid in y direction
-κ1v = -0.3:0.02:0.7 # initial grid in y direction
+#κ1v = -1.0:0.02:1.0 # initial grid in y direction
+κ1v = -1.3:0.02:0.7 # initial grid in y direction
 Spek = zeros(size(κ1v, 1), size(τv, 1))
 #Threads.@threads
 @time Threads.@threads for j in 1:size(τv, 1)

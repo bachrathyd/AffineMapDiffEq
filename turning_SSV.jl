@@ -93,7 +93,7 @@ Nstep = 150
 dpdp = dynamic_problemSampled(probTurningSSV, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=false);
 
 
-vfix_simulation = longerm_sim_fix_pint(dpdp, dpdp.DDEdynProblem.p)
+vfix_simulation = longerm_sim_fix_pint(dpdp, dpdp.Problem.p)
 
 
 
@@ -150,11 +150,11 @@ function fooTurningSSV(OMrel, k)
 end
 mymdbm=MDBM_Problem(fooTurningSSV,[ax1,ax2])
 iteration=3#number of refinements (resolution doubling)
-@time MDBM.solve!(mymdbm,iteration)
+@time MDBM.solve!(mymdbm,iteration);
 #points where the function foo was evaluated
-x_eval,y_eval=getevaluatedpoints(mymdbm)
+x_eval,y_eval=getevaluatedpoints(mymdbm);
 #interpolated points of the solution (approximately where foo(x,y) == 0 and c(x,y)>0)
-x_sol,y_sol=getinterpolatedsolution(mymdbm)
+x_sol,y_sol=getinterpolatedsolution(mymdbm);
 #scatter(x_eval,y_eval,markersize=1)
 #scatter!(x_sol,y_sol,markersize=3)
 scatter(x_sol,y_sol,markersize=1)
