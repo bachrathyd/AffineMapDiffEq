@@ -20,6 +20,7 @@ using ForwardDiff
 #using  LinearAlgebra
 #using  Interpolations
 
+#TODO: mutable 
 struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     Problem#::DDEProblem #e.g. =DDEProblem(....)
     alg#::MethodOfSteps # e.g.: alg = MethodOfSteps(Tsit5())
