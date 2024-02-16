@@ -34,14 +34,14 @@ function DelayMathieu(u, h, p, t)
     dx = u[2]
     #ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] # Traditional Delayed Mathieu equation
     #sign
-    ddx = [-(δ + ϵ * (cos(t))), -2 * ζ]' * u + b * h(p, t - τ)[1] + ν * h(p, t - τ, Val{1})[2]#The last pert is a test for neutral system
+    ddx = [-(δ + ϵ * (cos(t))), -2 * ζ]' * u + b * h(p, t - τ)[1] + ν * h(p, t - τ, Val{1})[2]#The last part is a test for neutral system
     SA[dx, ddx]
 end
 
 
 ζ = 0.03
 δ = 1.1
-ϵ = 0.2
+ϵ = 0.9
 τ = 2pi
 b = 0.2
 ν = 0.25 # Neutral coefficient
@@ -51,24 +51,30 @@ p = ζ, δ, ϵ, b, τ, ν, T
 #p = (ζ, ωn, k, τ,10.0)
 
 u0 = SA[1.0, 1.0]
-h(p, t::Float64) = SA[0.0; -0.0]
+h(p, t::Float64) = SA[0.5; -1.0]
 h(p, t::Float64, deriv::Type{Val{1}}) = SA[0.0, 0.0]
-probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 20.0), p; constant_lags=[τ], neutral=true)
+probMathieu = DDEProblem(DelayMathieu,  h, (0.0, T * 10.0), p; constant_lags=[τ], neutral=true)
 
 sol = solve(probMathieu, MethodOfSteps(BS3()))#abstol,reltol
 plot(sol)
-
-
+#t=(-3.0:0.5:63)
+#scatter!(t,getindex.(sol.(t),1))
+#t=(-3.0:0.1:00)
+#scatter!(t,getindex.([h(p, tt) for tt in t],1),xlims = (-10,70),)
+#t=(-3.0:0.52:63)
+#scatter!(t,getindex.([getvalues(sol,tt) for tt in t],1),xlims = (-10,70),)
 
 plot(sol(sol.t[end] .- (0.0:0.01:τ*1.0)))
 
 Base.:+(a::SVector, b::Bool) = a .+ b
 
 
+τmax = 2pi + 0.00001
 Nstep = 50
-τmax = 2pi + 0.1
-dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=20, zerofixpont=true);
-#dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
+TsampledSol=sol.t[sum(sol.t .< (sol.t[end]-τmax))-1:end] .- sol.t[end]
+
+#dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=TsampledSol, eigN=20, zerofixpont=true);
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
 
 # fix point by affine map
 muaff, s0aff = affine(dpdp; p=p);
@@ -76,7 +82,7 @@ mus0, As = spectrum(dpdp; p=p);
 plot(log.(abs.(muaff[1])))
 plot!(log.(abs.(mus0)))
 
-
+@benchmark affine($dpdp; p=$p)
 
 scatter(muaff[1])
 scatter!(mus0)

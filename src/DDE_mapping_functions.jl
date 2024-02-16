@@ -199,9 +199,10 @@ end
 #    return vv::Vector{Float64}
 #end
 
+
 function getvalues(sol::ODESolution, t::T) where T<:Real 
 
-    if t < 0.0
+    if t < sol.t[1]
         sol.prob.h(sol.prob.p, t)::typeof(sol.prob.u0)
     elseif t == 0.0
         sol.prob.u0::typeof(sol.prob.u0)

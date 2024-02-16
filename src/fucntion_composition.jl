@@ -13,59 +13,82 @@ using StaticArrays
 
 #h(p, t::Float64) = ...
 #h(p, t::Float64, deriv::Type{Val{1}}) = ...
-struct funcomp{T}#<: Function   F<:Function
+struct funcomp{T,Tout}#<: Function   F<:Function
     scaler::Vector{T}
     f::Vector{Any}#{Function}
     range::Vector{T}
+    #outtype=Tout::DataType
 end
+
+#function Base.show(io::IO, fc::funcomp) # I heve to remove <: Function to have pretty-print
+#    println(io, "scaler: $(fc.scaler)")
+#    println(io, "functinos: $(fc.f)")
+#    println(io, "range $(fc.range)")
+#end
+
 function Base.show(io::IO, fc::funcomp) # I heve to remove <: Function to have pretty-print
+    println(io, typeof(fc))
     println(io, "scaler: $(fc.scaler)")
-    println(io, "functinos: $(fc.f)")
+    println(io, "Num. functinos: $(size(fc.f,1))")
     println(io, "range $(fc.range)")
 end
 
 
-
 # ------------- Initializations --------------------
-function funcomp()
-    funcomp{Float64}(Float64[], funcomp[], [0.0, 0.0])
+#error("provide no type")
+#function funcomp()
+#    funcomp{Float64}(Float64[], funcomp[], [0.0, 0.0])
+#end
+function Base.return_types(fc::funcomp{A,Tout}) where {A,Tout}
+    return [Tout]
 end
-
 function funcomp(foo::F) where {F<:Function}
-    funcomp{Float64}([1.0], [foo], [0.0, 1.0])
+    Tout=Base.return_types(foo,(Float64,))[1]
+    funcomp{Float64,Tout}([1.0], [foo], [0.0, 1.0])
 end
 function funcomp(foo::F, range::Vector{T}) where {F<:Function} where {T}
-    funcomp{Float64}([1.0], [foo], range)
+    Tout=Base.return_types(foo,(Float64,))[1]
+    funcomp{Float64,Tout}([1.0], [foo], range)
 end
-
 
 function funcomp(scaler::Float64, foo::F) where {F<:Function}
-    funcomp{Float64}([scaler], [foo], [0.0, 1.0])
+    Tout:Base.return_types(foo,(Float64,))[1]
+    funcomp{Float64,Tout}([scaler], [foo], [0.0, 1.0])
 end
 function funcomp(scaler::Float64, foo::F, range::Vector{T}) where {F<:Function} where {T}
-    funcomp{Float64}([scaler], [foo], range)
+    Tout=Base.return_types(foo,(Float64,))[1]
+    funcomp{Float64,Tout}([scaler], [foo], range)
 end
 
-function funcomp(scaler::Vector{Float64}, foos::Vector)# where {F<:Function}
-    reduce!(funcomp{Float64}(scaler, Any[foos...], [0.0, 1.0]))
+function funcomp(scaler::Vector{Float64,}, foos::Vector)# where {F<:Function}
+    Tout=Base.return_types(foos[1],(Float64,))[1]
+    reduce!(funcomp{Float64,Tout}(scaler, Any[foos...], [0.0, 1.0]))
 end
 
 function funcomp(scaler::Vector{Float64}, foos::Vector{F}, range::Vector{T}) where {F<:Function} where {T}
-    reduce!(funcomp{Float64}(scaler, Any[foos...], range))
+    Tout=Base.return_types(foos[1],(Float64,))[1]
+    reduce!(funcomp{Float64,Tout}(scaler, Any[foos...], range))
+end
+function funcomp(scaler::Vector{Float64}, foos::Vector{F}, range::Vector{T}) where {F<:Any} where {T}
+    Tout=Base.return_types(foos[1],(Float64,))[1]
+    reduce!(funcomp{Float64,Tout}(scaler, Any[foos...], range))
 end
 
 function funcomp(foos::Vector)
-    reduce!(funcomp{Float64}(ones(Float64, size(foos, 1)), Any[foos...], [0.0, 1.0]))
+    Tout=Base.return_types(foos[1],(Float64,))[1]
+    reduce!(funcomp{Float64,Tout}(ones(Float64, size(foos, 1)), Any[foos...], [0.0, 1.0]))
 end
 function funcomp(foos::Vector, range::Vector{T}) where {T}
-    reduce!(funcomp{Float64}(ones(Float64, size(foos, 1)), Any[foos...], range))
+    Tout=Base.return_types(foos[1],(Float64,))[1]
+    reduce!(funcomp{Float64,Tout}(ones(Float64, size(foos, 1)), Any[foos...], range))
 end
 
 #TODO:: All function must have the same output, it should be checked!
 #TODO:: onye the first elements of the Base.return_types, but is should not be a problem, because the inputstypes are well defined
 #Ettől sokkal lassabb lett ha megadtam a kimenet tipusát: ::Base.return_types(fc.f[1],(PT,Float64))[1]
-function (fc::funcomp{A})(p::PT, t::Float64) where {A} where {PT}
-    @inbounds mapreduce(x -> x[1] .* x[2](p, t), +, zip(fc.scaler, fc.f))
+function (fc::funcomp{T,Tout})(t::Float64)::Tout where {T} where {Tout}
+    @inbounds out=mapreduce(x -> x[1] .* x[2](t), +, zip(fc.scaler, fc.f))
+    return out::Tout
 end
 
 
@@ -86,7 +109,9 @@ end
 
 #Base.similar(v): a way to construct vectors which are exactly similar to v
 function Base.similar(v::funcomp)::funcomp
-    funcomp()
+    #TODO: return an error if v is also empty - maybe it is not a problem
+    wout=0.0 * v
+    empty!(v)
 end
 #TODO: this is  bug (or feature): foo([1,2], -1.3)
 
@@ -201,8 +226,8 @@ function LinearAlgebra.dot(v::funcomp, w::funcomp)::Float64
     tstart = maximum([v.range[1], w.range[1]])
     tend = minimum([v.range[2], w.range[2]])
 
-    prob = IntegralProblem((t, p) -> v(p, t)' * w(p, t), tstart, tend)
-    VW = solve(prob, HCubatureJL()).u# reltol=1e-5, abstol=1e-5r
+    prob = IntegralProblem((t, p) -> v(t)' * w(t), tstart, tend)
+    VW = solve(prob, HCubatureJL(),reltol=1e-5, abstol=1e-5).u# 
     #println(VW)
     return VW::Float64
 end
@@ -211,164 +236,3 @@ end
 function LinearAlgebra.norm(v::funcomp)::Float64
     return sqrt(dot(v, v))::Float64
 end
-
-#---------------- tests -------------------
-
-foo1(p, t::Float64) = sin(t)
-foo2(p, t::Float64) = 10.0
-foo3(p, t::Float64) = t
-
-
-his = funcomp(300.0, foo2, [-1.0, 10.0])
-his = funcomp([300.0, 500], [foo1, foo2], [-1.0, 10.0])
-
-
-
-foos = deepcopy(his)
-empty!(foos)
-foos
-his
-
-
-#TODO: this is  bug (or feature): foo([1,2], -1.3)
-his = funcomp([300.0, 500], [foo1, foo2])
-fooX = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
-rmul!(fooX, 10.0)
-mul!(fooX, his, 10.0)
-
-his = funcomp([300.0, 500], [foo1, foo2])
-his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
-his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
-his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
-@benchmark his("a",1.0)
-collapse!(his)
-@time his("a",1.0)
-reduce!(his)
-@time his("a",1.0)
-@benchmark his("a",1.0)
-
-fc = fooX
-foo = similar(his)
-
-his = funcomp([300.0, 500], [foo1, foo2], [1.0, 2.0])
-rmul!(his, 0.01)
-his
-his([], -1.3)
-
-
-his = funcomp([300.0, 500], [foo1, foo2], [-2.0, 0.5])
-his2 = funcomp(foo3, [-1.0, 1.5])
-axpy!(10.0, his, his2)
-axpy!(10.0, his, foo2)
-
-
-
-his = funcomp([300.0, 500], [foo1, foo2], [-2.0, 0.5])
-his2 = funcomp(foo3, [-1.0, 1.5])
-axpby!(10.0, his, 20.0, his2)
-axpby!(10.0, his, 20.0, his2)
-
-
-reduce!(his2)
-
-
-his = funcomp([foo1, foo2], [-2.0, 0.5])
-his1 = funcomp(foo3, [-0.0, 1.0])
-his2 = funcomp(foo3, [-1.0, 1.5])
-
-dot(his1, his2)
-
-norm(his1)
-
-#------------------------ Mathieu test------------------
-
-
-function f_now(p, t)
-    ζ, δ, ϵ, b, τ, T = p
-    # println("Computed $t")
-    # println("Computed $p")
-    SA[-(δ + ϵ * cos(t)), -2*ζ]
-    #SA[-(δ+ϵ*sign(cos(t))), -2*ζ]
-end
-#@memoize 
-function f_past(p, t)
-    ζ, δ, ϵ, b, τ, T = p
-    SA[b, 0]
-end
-
-function DelayMathieu(u, h, p, t)
-    ζ, δ, ϵ, b, τ, ν, T = p
-    dx = u[2]
-    #ddx = [-(δ+ϵ*cos(t)), -2*ζ]' * u + b * h(p, t - τ)[1] # Traditional Delayed Mathieu equation
-    #sign
-    ddx = [-(δ + ϵ * (cos(t))), -2 * ζ]' * u + b * h(p, t - τ)[1]# + ν * h(p, t - τ, Val{1})[2]#The last pert is a test for neutral system
-    SA[dx, ddx]
-end
-
-
-ζ = 0.03
-δ = 1.1
-ϵ = 0.2
-τ = 2pi
-b = 0.2
-ν = 0.25 # Neutral coefficient
-T = 10;
-2pi;
-p = ζ, δ, ϵ, b, τ, ν, T
-#p = (ζ, ωn, k, τ,10.0)
-
-u0 = SA[1.0, 1.0]
-
-h(p, t::Float64) = SA[1.0; -0.0]
-probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 1.0), p; constant_lags=[τ], neutral=true)
-
-sol = solve(probMathieu, MethodOfSteps(BS3()))
-plot(sol)
-
-#----------Sampled Affine Map -----------
-
-Base.:+(a::SVector, b::Bool) = a .+ b
-Nstep = 50
-τmax = 2pi + 0.1
-dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=20, zerofixpont=true);
-
-@time muaff, s0aff = affine(dpdp; p=p);
-muaff[1]
-
-#benchmark affine(dpdp; p=p)
-
-
-
-#---------------------------Krylov-Functional-------------
-
-his2 = funcomp(h, [-τmax, 0.0])
-Base.return_types(h,(Any,Float64))
-Base.return_types(his2.f[1],(Any,Float64))
-@benchmark h([], -1.0)
-@benchmark his2(1, -1.0)
-
-
-
-
-
-
-@code_warntype his2([], -1.0)
-function LinMap(his::funcomp)::funcomp
-    sol = solve(remake(probMathieu; u0=his(p, 0.0), tspan=(0.0, T), h=his, p=p), MethodOfSteps(BS3()); verbose=false);
-    his = funcomp([1.0], [(p, t) -> sol(t + T)], his.range);
-end
-
-@benchmark solve(remake(probMathieu; u0=h(p, 0.0), tspan=(0.0, T), h=h, p=p), MethodOfSteps(BS3()); verbose=false)
-@benchmark solve(remake(probMathieu; u0=his2(p, 0.0), tspan=(0.0, T), h=his2, p=p), MethodOfSteps(BS3()); verbose=false)
-@benchmark LinMap(his2)
-
-mus = getindex(schursolve(LinMap, his2, 15, :LM, KrylovKit.Arnoldi(krylovdim=18, verbosity=2)), [3, 2, 1])
-mus = schursolve(LinMap, his2, 5, :LM)
-
-
-## Different behavioure
-T = 0.3
-T = 6.0 # somehow the number of scalers and the number of function are not the same.
-#TODO: question: what happens if the same function is used by differnet instance, and on is chaneg inplace. 
-#especiall, it is racursive useage??!?! -> brute-forece solution: try deepcopy of all functions after it is provided.
-T = 10.0
