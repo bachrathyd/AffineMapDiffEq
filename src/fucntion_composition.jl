@@ -20,11 +20,11 @@ struct funcomp{T,Tout}#<: Function   F<:Function
     #outtype=Tout::DataType
 end
 
-#function Base.show(io::IO, fc::funcomp) # I heve to remove <: Function to have pretty-print
-#    println(io, "scaler: $(fc.scaler)")
-#    println(io, "functinos: $(fc.f)")
-#    println(io, "range $(fc.range)")
-#end
+function Base.show(io::IO, fc::funcomp) # I heve to remove <: Function to have pretty-print
+    println(io, "scaler: $(fc.scaler)")
+    println(io, "functinos: $(fc.f)")
+    println(io, "range $(fc.range)")
+end
 
 function Base.show(io::IO, fc::funcomp) # I heve to remove <: Function to have pretty-print
     println(io, typeof(fc))
@@ -75,8 +75,10 @@ function funcomp(scaler::Vector{Float64}, foos::Vector{F}, range::Vector{T}) whe
 end
 
 function funcomp(foos::Vector)
+    println("aaaaabbbbbaaaa")
     Tout=Base.return_types(foos[1],(Float64,))[1]
     reduce!(funcomp{Float64,Tout}(ones(Float64, size(foos, 1)), Any[foos...], [0.0, 1.0]))
+    
 end
 function funcomp(foos::Vector, range::Vector{T}) where {T}
     Tout=Base.return_types(foos[1],(Float64,))[1]
@@ -109,9 +111,9 @@ end
 
 #Base.similar(v): a way to construct vectors which are exactly similar to v
 function Base.similar(v::funcomp)::funcomp
-    #TODO: return an error if v is also empty - maybe it is not a problem
+   # #TODO: return an error if v is also empty - maybe it is not a problem
     wout=0.0 * v
-    empty!(v)
+    #empty!(v)
 end
 #TODO: this is  bug (or feature): foo([1,2], -1.3)
 
@@ -181,11 +183,13 @@ end
 
 
 function collapse!(fc::funcomp)::funcomp
-    for i in eachindex(fc.f)
+    for i in length(fc.f):-1:1
         if typeof(fc.f[i]) <: funcomp
-            for _ in eachindex(fc.f[i].f)
-                push!(fc.f, pop!(fc.f[i].f))
-                push!(fc.scaler, fc.scaler[i] .* pop!(fc.f[i].scaler))
+            for kf in eachindex(fc.f[i].f)
+                #push!(fc.f, pop!(fc.f[i].f))
+                #push!(fc.scaler, fc.scaler[i] .* pop!(fc.f[i].scaler))
+                push!(fc.f, fc.f[i].f[kf])
+                push!(fc.scaler, fc.scaler[i] .* fc.f[i].scaler[kf])
             end
 
             fc.range[1] = maximum([fc.range[1], fc.f[i].range[1]])
@@ -204,6 +208,7 @@ function reduce!(fc::funcomp)::funcomp
         collapse!(fc)
     end
     fsunique = unique(fc.f)
+    
     newscales = [sum(fc.scaler[fc.f.==fu]) for fu in fsunique]
 
     empty!(fc)#range is not deleted!!!
