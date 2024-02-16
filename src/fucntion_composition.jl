@@ -61,7 +61,10 @@ function funcomp(foos::Vector, range::Vector{T}) where {T}
     reduce!(funcomp{Float64}(ones(Float64, size(foos, 1)), Any[foos...], range))
 end
 
-function (fc::funcomp{A})(p::Any, t::Float64) where {A}# where {B}
+#TODO:: All function must have the same output, it should be checked!
+#TODO:: onye the first elements of the Base.return_types, but is should not be a problem, because the inputstypes are well defined
+#Ettől sokkal lassabb lett ha megadtam a kimenet tipusát: ::Base.return_types(fc.f[1],(PT,Float64))[1]
+function (fc::funcomp{A})(p::PT, t::Float64) where {A} where {PT}
     @inbounds mapreduce(x -> x[1] .* x[2](p, t), +, zip(fc.scaler, fc.f))
 end
 
@@ -115,17 +118,17 @@ end
 #LinearAlgebra.axpy!(α, v, w): store in w the result of α*v + w
 function LinearAlgebra.axpy!(α::Number, v::funcomp, w::funcomp)::funcomp
 
-    println("..............")
-    println(α)
-    
-    println("-----------")
-    println(size(w.f, 1))
-    println(size(v.f, 1))
-    println("-----------")
-    println(size(w.scaler, 1))
-    println(size(v.scaler, 1))
-    println(size(w.range, 1))
-    println(size(v.range, 1))
+   # println("..............")
+   # println(α)
+#
+   # println("-----------")
+   # println(size(w.f, 1))
+   # println(size(v.f, 1))
+   # println("-----------")
+   # println(size(w.scaler, 1))
+   # println(size(v.scaler, 1))
+   # println(size(w.range, 1))
+   # println(size(v.range, 1))
 
 
     append!(w.f, v.f)
@@ -151,25 +154,40 @@ function LinearAlgebra.axpby!(α::Number, v::funcomp, β::Number, w::funcomp)::f
 end
 
 
-function reduce!(fc::funcomp)::funcomp
-    #println("-----------")
-    #println(size(fc.f, 1))
-    #println(size(fc.scaler, 1))
-    fsunique = unique(fc.f)
-    newscales = [sum(fc.scaler[fc.f .== fu]) for fu in fsunique]
 
-    #println(size(fsunique, 1))
-    #println(size(newscales, 1))
+function collapse!(fc::funcomp)::funcomp
+    for i in eachindex(fc.f)
+        if typeof(fc.f[i]) <: funcomp
+            for _ in eachindex(fc.f[i].f)
+                push!(fc.f, pop!(fc.f[i].f))
+                push!(fc.scaler, fc.scaler[i] .* pop!(fc.f[i].scaler))
+            end
+
+            fc.range[1] = maximum([fc.range[1], fc.f[i].range[1]])
+            fc.range[2] = minimum([fc.range[2], fc.f[i].range[2]])
+
+            deleteat!(fc.f, i)
+            deleteat!(fc.scaler, i)
+        end
+    end
+    return fc
+end
+
+function reduce!(fc::funcomp)::funcomp
+
+    while any(typeof.(fc.f) .<: funcomp)
+        collapse!(fc)
+    end
+    fsunique = unique(fc.f)
+    newscales = [sum(fc.scaler[fc.f.==fu]) for fu in fsunique]
+
     empty!(fc)#range is not deleted!!!
 
     append!(fc.f, fsunique)
     append!(fc.scaler, newscales)
 
-    #println(size(fc.f, 1))
-    #println(size(fc.scaler, 1))
     return fc
 end
-
 
 
 
@@ -196,13 +214,16 @@ end
 
 #---------------- tests -------------------
 
-foo1(p, t) = sin(t)
-foo2(p, t) = 10.0
-foo3(p, t) = t
+foo1(p, t::Float64) = sin(t)
+foo2(p, t::Float64) = 10.0
+foo3(p, t::Float64) = t
 
 
 his = funcomp(300.0, foo2, [-1.0, 10.0])
 his = funcomp([300.0, 500], [foo1, foo2], [-1.0, 10.0])
+
+
+
 foos = deepcopy(his)
 empty!(foos)
 foos
@@ -210,11 +231,23 @@ his
 
 
 #TODO: this is  bug (or feature): foo([1,2], -1.3)
-fooX = funcomp([5.0, 10.0], [foo3, sin], [-1.0, 0.5])
 his = funcomp([300.0, 500], [foo1, foo2])
+fooX = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
+rmul!(fooX, 10.0)
 mul!(fooX, his, 10.0)
 
+his = funcomp([300.0, 500], [foo1, foo2])
+his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
+his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
+his = funcomp([5.0, 10.0, 20.0], [foo3, foo1, his], [-1.0, 0.5])
+@benchmark his("a",1.0)
+collapse!(his)
+@time his("a",1.0)
+reduce!(his)
+@time his("a",1.0)
+@benchmark his("a",1.0)
 
+fc = fooX
 foo = similar(his)
 
 his = funcomp([300.0, 500], [foo1, foo2], [1.0, 2.0])
@@ -246,17 +279,6 @@ his2 = funcomp(foo3, [-1.0, 1.5])
 dot(his1, his2)
 
 norm(his1)
-
-#------- test DifEq. sol-al (is)-------------
-
-
-his = funcomp([3.0, 0.1, 1.3], [foo1, foo2, foo3])
-@benchmark his([1, 2], 1.5)
-his = funcomp([3.0, 0.1, 1.0], [foo1, foo3, (p, t) -> sol(t)[2]])
-@benchmark his([1, 2], 1.5)
-scatter(1:0.1:125, [sol(t)[2] for t in 1:0.1:125])
-plot!(t -> his([], t), range(0, 125, length=10000))
-
 
 #------------------------ Mathieu test------------------
 
@@ -298,12 +320,12 @@ p = ζ, δ, ϵ, b, τ, ν, T
 u0 = SA[1.0, 1.0]
 
 h(p, t::Float64) = SA[1.0; -0.0]
-probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T*1.0), p; constant_lags=[τ], neutral=true)
+probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 1.0), p; constant_lags=[τ], neutral=true)
 
 sol = solve(probMathieu, MethodOfSteps(BS3()))
 plot(sol)
 
-@benchmark solve(probMathieu, MethodOfSteps(BS3()))
+#----------Sampled Affine Map -----------
 
 Base.:+(a::SVector, b::Bool) = a .+ b
 Nstep = 50
@@ -313,29 +335,40 @@ dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Histo
 @time muaff, s0aff = affine(dpdp; p=p);
 muaff[1]
 
-@benchmark affine(dpdp; p=p)
+#benchmark affine(dpdp; p=p)
 
 
 
 #---------------------------Krylov-Functional-------------
 
 his2 = funcomp(h, [-τmax, 0.0])
-his2([], -1.0)
+Base.return_types(h,(Any,Float64))
+Base.return_types(his2.f[1],(Any,Float64))
+@benchmark h([], -1.0)
+@benchmark his2(1, -1.0)
 
+
+
+
+
+
+@code_warntype his2([], -1.0)
 function LinMap(his::funcomp)::funcomp
-    sol = solve(remake(probMathieu; u0=his(p, 0.0), tspan=(0.0, T), h=his, p=p), MethodOfSteps(BS3()); verbose=false)
-    his = funcomp([1.0], [(p, t) -> sol(t + T)], his.range)
+    sol = solve(remake(probMathieu; u0=his(p, 0.0), tspan=(0.0, T), h=his, p=p), MethodOfSteps(BS3()); verbose=false);
+    his = funcomp([1.0], [(p, t) -> sol(t + T)], his.range);
 end
 
-@benchmark hisout = LinMap(his2)
+@benchmark solve(remake(probMathieu; u0=h(p, 0.0), tspan=(0.0, T), h=h, p=p), MethodOfSteps(BS3()); verbose=false)
+@benchmark solve(remake(probMathieu; u0=his2(p, 0.0), tspan=(0.0, T), h=his2, p=p), MethodOfSteps(BS3()); verbose=false)
+@benchmark LinMap(his2)
 
-mus = getindex(schursolve(LinMap, his2, 5, :LM, KrylovKit.Arnoldi(krylovdim=18, tol=1e-90, verbosity=2)), [3, 2, 1])
+mus = getindex(schursolve(LinMap, his2, 15, :LM, KrylovKit.Arnoldi(krylovdim=18, verbosity=2)), [3, 2, 1])
 mus = schursolve(LinMap, his2, 5, :LM)
 
 
 ## Different behavioure
-T=0.3
-T=6.0 # somehow the number of scalers and the number of function are not the same.
+T = 0.3
+T = 6.0 # somehow the number of scalers and the number of function are not the same.
 #TODO: question: what happens if the same function is used by differnet instance, and on is chaneg inplace. 
 #especiall, it is racursive useage??!?! -> brute-forece solution: try deepcopy of all functions after it is provided.
-T=10.0
+T = 10.0
