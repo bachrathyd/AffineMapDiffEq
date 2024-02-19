@@ -215,14 +215,16 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     x = (v0 - s0)
 
     ##AtA = conj( eigvec' .* eigvec)
-    AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    vi = AtA \ Atx
-    vi_mu = (vi .* ((eigval) ./ (eigval .- 1.0)))
+ #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+ #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    ci = AtA \ Atx
+    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
 
-    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, vi_mu))
+    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
     return fix_v
 end
 
