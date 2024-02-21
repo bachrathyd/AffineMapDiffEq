@@ -45,7 +45,7 @@ end
 τ = 2pi
 b = 0.2
 ν = 0.25 # Neutral coefficient
-T = 6;
+T = 60;
 2pi;
 p = ζ, δ, ϵ, b, τ, ν, T
 #p = (ζ, ωn, k, τ,10.0)
@@ -56,7 +56,7 @@ h(p, t::Float64, deriv::Type{Val{1}}) = SA[0.0, 0.0]
 probMathieu = DDEProblem(DelayMathieu,  h, (0.0, T * 10.0), p; constant_lags=[τ], neutral=true)
 
 sol = solve(probMathieu, MethodOfSteps(BS3()))#abstol,reltol
-plot(sol)
+plot!(sol)
 #t=(-3.0:0.5:63)
 #scatter!(t,getindex.(sol.(t),1))
 #t=(-3.0:0.1:00)
@@ -74,19 +74,19 @@ Nstep = 50
 TsampledSol=sol.t[sum(sol.t .< (sol.t[end]-τmax))-1:end] .- sol.t[end]
 
 #dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=TsampledSol, eigN=20, zerofixpont=true);
-dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, eigN=5, zerofixpont=true);
+dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax, T; Historyresolution=Nstep, dt=0.1,eigN=5, zerofixpont=true);
 
 # fix point by affine map
-muaff, s0aff = affine(dpdp; p=p);
+@time muaff, s0aff = affine(dpdp; p=p);
 mus0, As = spectrum(dpdp; p=p);
 plot(log.(abs.(muaff[1])))
 plot!(log.(abs.(mus0)))
 
-@benchmark affine($dpdp; p=$p)
-
 scatter(muaff[1])
 scatter!(mus0)
 plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
+
+@benchmark affine($dpdp; p=$p)
 
 #Stability Chart
 

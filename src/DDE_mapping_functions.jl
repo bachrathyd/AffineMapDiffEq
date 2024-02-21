@@ -1,5 +1,5 @@
 function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
-    zerofixpont=true, dt=maxdelay / Historyresolution, affineinteration=1,adaptive=false,KrylovTol=1e-12,KrylovExtraDim=5)
+    zerofixpont=true, dt=maxdelay / Historyresolution, affineinteration=1, adaptive=false, KrylovTol=1e-12, KrylovExtraDim=5)
 
     StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO: Float64!!!
     #eigs = zeros(ComplexF64, eigN)
@@ -8,7 +8,7 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
     dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN,
-    zerofixpont, affineinteration,adaptive,KrylovTol,KrylovExtraDim)
+        zerofixpont, affineinteration, adaptive, KrylovTol, KrylovExtraDim)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.Problem, kwargs...)
@@ -37,14 +37,14 @@ function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
 
     #randsimilar!(s_start)
     #EIGEN BASED
-     # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
+    # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
     #ISSI BASED
     #mus = issi_eigen(dp::dynamic_problemSampled,p=p)
 
     #SCHUR BASED
-    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN + dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
     # T, vecs, vals, info = schursolve(...) with
 
 
@@ -66,7 +66,7 @@ function partialpart(xSA::SVector)
     return SA[bb...]
 end
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where {T}
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)
     #println(norm(s0-v0))
@@ -74,14 +74,14 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     s_start = rand(typeof(dp.Problem.u0), Nstep)
 
     #TheMapping(s::T) = (LinMap(dp, s + s0; p=p) - v0)::T
-  
+
     one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
     #if true#~DODOAU
     #    println("Float perturbation")
     #    s_start .*=  EPSI_TODO_REMOVE
     #else
-        #println("Dual perturbation - it seems to be faster! ;-)")
-        TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)::T
+    #println("Dual perturbation - it seems to be faster! ;-)")
+    TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)::T
     #end
 
     # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
@@ -93,7 +93,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #TODO: in case of very high tolerance it will use all the krylovdim!!!
-    mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN + dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
 
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
     #TODO: schursolve
@@ -104,8 +104,8 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     ###println(norm(s0 - LinMap(dp, s0; p=p)))
     #TODO: it might be better to incluse the mus calcluations here too
     for k_fix_iteration in 1:40  #TODO:use input parameters for this with default value
-       s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))::T#TODO: kell a real? 
-       # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
+        s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))::T#TODO: kell a real? 
+        # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
         normerror = norm(s0 - LinMap(dp, s0; p=p))
         if (normerror) < 1e-5 #TODO:use input parameters for this with default value
             #println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
@@ -119,9 +119,9 @@ end
 
 function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
     #TODO: fixed dimension problem!!!!
-    
 
-#global NNN=0
+
+    #global NNN=0
     Nstep = size(dp.StateSmaplingTime, 1)
     s0 = zeros(typeof(dp.Problem.u0), Nstep)
     #s0 = rand(typeof(dp.Problem.u0), Nstep)
@@ -130,16 +130,16 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
     for _ in 2:dp.affineinteration #secondary interation
         muSFix = affine(dp, muSFix[2]; p=p)
     end
-    
-#println(NNN)
+
+    #println(NNN)
     return muSFix
 
 end
 
-function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# where T
+function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where {T}# where T
 
-    
-#global NNN +=1
+
+    #global NNN +=1
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
     #StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
     StateSmaplingTime = dp.StateSmaplingTime
@@ -173,7 +173,8 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# wh
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-     sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=dp.adaptive, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=dp.adaptive, dt=dt; verbose=false, save_everystep=false, saveat=NewTimePoints)#)#abstol,reltol
+    #TODO: ez kellene, hogy segítsen hosszú szimulációnál
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.Problem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
@@ -187,7 +188,15 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# wh
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts - ez lassabbnak tűnik!
-    v = [getvalues(sol, ti) for ti in NewTimePoints]
+    v = [getvalues(sol, ti) for ti in NewTimePoints]#Ez gyorsabbnak tűnik!
+
+#Ez lassabb- több köztes memóriát foglal
+  #  v = vcat(
+   #     Hist_interp_linear(NewTimePoints[NewTimePoints .< 0.0]),
+    #    sol(NewTimePoints[NewTimePoints .>= 0.0]).u
+    #)
+
+   #println(norm(vv - v))
     #vv = reduce(vcat, v)
     #return vv::Vector{Float64}
     #return vv#::Vector{T}
@@ -200,7 +209,7 @@ end
 #end
 
 
-function getvalues(sol::ODESolution, t::T) where T<:Real 
+function getvalues(sol::ODESolution, t::T) where {T<:Real}
 
     if t < sol.t[1]
         sol.prob.h(sol.prob.p, t)::typeof(sol.prob.u0)
