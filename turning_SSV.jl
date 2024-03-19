@@ -1,11 +1,12 @@
 5 + 5
+
+
 using Revise
-#includet("src\\DDE_mapping.jl")
-includet("src\\DDE_mapping_types.jl")
-includet("src\\DDE_mapping_functions.jl")
+using DDE_mapping
 
 using StaticArrays
 using DifferentialEquations
+using LinearAlgebra
 using Plots
 
 #using BenchmarkTools
@@ -135,10 +136,10 @@ Spek_aff = zeros(size(kv, 1), size(OMv, 1))
 using MDBM
 kv = -0.0001:0.05:0.4
 ax1=Axis(0.2001:0.05:0.6,"OM") # initial grid in x direction
-ax2=Axis(-0.0001:0.1:0.4,"k") # initial grid in y direction
+ax2=Axis(-0.0001:0.1:1.4,"k") # initial grid in y direction
 
 RVA = 0.2;
-RVF = 1/5;#1.0;
+RVF = 1/1;#1.0;
 function fooTurningSSV(OMrel, k)
     τmax = 2pi / OMrel * (1.0 + RVA) + 0.1
     T = 2pi / OMrel / RVF

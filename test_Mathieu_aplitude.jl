@@ -1,10 +1,14 @@
 10+10
 
 println(Threads.nthreads())
+
+
 using Revise
-#includet("src\\DDE_mapping.jl")
-includet("src\\DDE_mapping_types.jl")
-includet("src\\DDE_mapping_functions.jl")
+using DDE_mapping
+  
+###includet("src\\DDE_mapping.jl")
+##includet("src\\DDE_mapping_types.jl")
+##includet("src\\DDE_mapping_functions.jl")
 
 using BenchmarkTools
 using Plots
@@ -13,6 +17,7 @@ using Profile
 using StaticArrays
 using DifferentialEquations
 
+using LinearAlgebra
 
 ##TODO: Bifurcation Analysis in Julia
 
@@ -94,7 +99,7 @@ plot!(getindex.(s0aff,2))
 Nstep = 50
 τmax = NF(2pi+0.1)
 dpdp = dynamic_problemSampled(probMathieu, MethodOfSteps(BS3()), τmax,
- T; Historyresolution=Nstep, eigN=2, zerofixpont=false);
+ T; Historyresolution=Nstep, eigN=4, zerofixpont=false);
 
 δv=0:0.051:10 # initial grid in x direction
 bv=-1.501:0.05:1.5 # initial grid in y direction

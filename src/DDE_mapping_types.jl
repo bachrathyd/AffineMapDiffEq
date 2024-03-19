@@ -1,24 +1,4 @@
-using Profile
-5+5 
 
-using KrylovKit
-using DifferentialEquations
-using StaticArrays
-using LinearAlgebra
-using Interpolations
-
-
-
-using ForwardDiff
-#using Plots
-#PythonPlot()
-#plotlyjs()
-
-#using  KrylovKit
-#using  DifferentialEquations
-#using  StaticArrays
-#using  LinearAlgebra
-#using  Interpolations
 
 struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     Problem#::DDEProblem #e.g. =DDEProblem(....)
