@@ -73,15 +73,15 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where {T}
     Nstep = size(dp.StateSmaplingTime, 1)
     s_start = rand(typeof(dp.Problem.u0), Nstep)
 
-    #TheMapping(s::T) = (LinMap(dp, s + s0; p=p) - v0)::T
+    TheMapping(s::T) = ((LinMap(dp, s .* EPSI_TODO_REMOVE + s0; p=p) - v0) ./ EPSI_TODO_REMOVE)::T
 
-    one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+    ###one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
     #if true#~DODOAU
     #    println("Float perturbation")
-    #    s_start .*=  EPSI_TODO_REMOVE
+#        s_start .*=  EPSI_TODO_REMOVE
     #else
     #println("Dual perturbation - it seems to be faster! ;-)")
-    TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)::T
+   ### TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)::T
     #end
 
     # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
