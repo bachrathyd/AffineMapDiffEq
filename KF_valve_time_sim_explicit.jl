@@ -22,6 +22,7 @@ using LaTeXStrings
 using MDBM
 #using MAT
 using Peaks
+using NaNStatistics
 
 function valve_KF_DADE_exp(y, h, p, t)
     ζ, δ, τ, β, Φ, q, h4 = p
@@ -62,16 +63,24 @@ function y4_fun(sol, p)
 end
 ## - futtatás 
 
-x = []
-y = []
-z = []
+x = Float64[]
+y = Float64[]
+z = Float64[]
 
-scatter([], [], [])
+
+logdekmin = Float64[]
+logdekminY1 = Float64[]
+scatter(Float64[], Float64[], Float64[])
 ζ = 0.39
 δ = 3.0
 τ = 0.25
 #for β = LinRange(7.6,7.9,10)#7.82
-for β = LinRange(7.79, 7.815, 50)#7.82
+for β = LinRange(7.5, 7.815, 30)#7.82
+    #for β = LinRange(7.79, 7.815, 50)#7.82
+
+    xx = Float64[]
+    yy = Float64[]
+    zz = Float64[]
     println("---------------")#7.82
     println(β)
     Φ = 48.2
@@ -90,7 +99,7 @@ for β = LinRange(7.79, 7.815, 50)#7.82
 
 
 
-    for Nmutip in 1.55:-0.05:1.05#0.1:0.1:2
+    for Nmutip in 1.55:-0.025:1.05#0.1:0.1:2
         println("Nmutip: $Nmutip")
         Base.:+(a::SVector, b::Bool) = a .+ b
 
@@ -98,12 +107,12 @@ for β = LinRange(7.79, 7.815, 50)#7.82
         u0start = [4.42 * Nmutip, 0.0, 2.5 * Nmutip] .* 0.0 .+ uFIX[1:3] .* Nmutip#+rand(3).*Nmutip
         h123(p, t) = SA[u0start...]
         h4(p, t) = q * Φ / 2 * Nmutip * 0.0 + uFIX[4] * Nmutip
-
-
+        #u0start = [0.0, Nmutip,  0.0] .+ uFIX[1:3]#+rand(3).*Nmutip
+        #h123(p, t) = SA[u0start...]
+        #h4(p, t) =uFIX[4]
         p = (ζ, δ, τ, β, Φ, q, h4)
         u0 = h123(p, 0.0)
         valve_KF_DADE_exp_fun = DDEFunction(valve_KF_DADE_exp)
-
         #kt=0
         #prob_valve_exp = DDEProblem(valve_KF_DADE_exp_fun, u0, h123, [0.0, T] .+ kt * τ, p, constant_lags=[τ])
         #integrator = init(prob_valve_exp, MethodOfSteps(Rodas5()),reltol=1e-8, abstol=1e-8)
@@ -125,7 +134,7 @@ for β = LinRange(7.79, 7.815, 50)#7.82
         kt = 0
         #kt=10000
         #for kt in 0:10000
-        for _ in 0:5000
+        for _ in 0:1000
             kt += 1
             #if mod(kt, 50) == 0
             #    println(kt)
@@ -133,7 +142,7 @@ for β = LinRange(7.79, 7.815, 50)#7.82
             prob_valve_exp = DDEProblem(valve_KF_DADE_exp_fun, u0, h123, [0.0, T] .+ kt * τ, p, constant_lags=[τ])
 
             #@time 
-            sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-10, abstol=1e-10)
+            sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-12, abstol=1e-12)
             #sol_exp = solve(prob_valve_exp, MethodOfSteps(BS3()),        reltol=1e-5, abstol=1e-5,dt=0.5)
 
             #plot!(sol_exp, linestyle=:dash)
@@ -166,15 +175,17 @@ for β = LinRange(7.79, 7.815, 50)#7.82
         #close(file)
 
 
-        #plot(t_final,getindex.(u_final,1), linestyle=:dash,linewidth = 3)
-        #plot!(t_final,getindex.(u_final,2), linestyle=:dash,linewidth = 3)
-        #plot!(t_final,getindex.(u_final,3), linestyle=:dash,linewidth = 3)
-        #plot!(t_final,f_final, linestyle=:dash,linewidth = 3)
 
+        #plotly()
+        # aa=       plot(t_final,getindex.(u_final,1),linewidth = 3)#, linestyle=:dash
+        #        plot!(t_final,getindex.(u_final,2),linewidth = 3)#, linestyle=:dash
+        #        plot!(t_final,getindex.(u_final,3),linewidth = 3)#, linestyle=:dash
+        #        aa=plot!(t_final,f_final,linewidth = 3)#, linestyle=:dash
+        #display(aa)
         Npoints = size(t_final, 1)
-        t_final = t_final[floor(Int, Npoints / 10):end]
-        u_final = u_final[floor(Int, Npoints / 10):end]
-        f_final = f_final[floor(Int, Npoints / 10):end]
+        t_final = t_final[floor(Int, Npoints / 5):end]
+        u_final = u_final[floor(Int, Npoints / 5):end]
+        f_final = f_final[floor(Int, Npoints / 5):end]
 
         y1 = getindex.(u_final, 1)
         y1_pert = y1 .- uFIX[1]
@@ -184,19 +195,21 @@ for β = LinRange(7.79, 7.815, 50)#7.82
         MaxInd = argmaxima(y1)
         y1locmax = y1_pert[MaxInd]
 
+
+        logdek = log.(y1locmax[1:end-1] ./ y1locmax[2:end])
         #scatter!(t_final[MaxInd], y1[MaxInd])
 
         #scatter(t_final[MaxInd][2:end],log.(y1locmax[1:end-1]./y1locmax[2:end]),yticks=LinRange(0,1e-2,10))
 
         #2D
-        #  PLOTaaa = scatter!(log.(y1locmax[1:end-1] ./ y1locmax[2:end]),        y1locmax[1:end-1] .+ uFIX[1], ylabel="y1", xlabel="LogDek")
+        #  PLOTaaa = scatter!(logdek,        y1locmax[1:end-1] .+ uFIX[1], ylabel="y1", xlabel="LogDek")
         #3D 
-        #  PLOTaaa = scatter!(y1locmax[1:end-1]*0.0 .+ β, y1locmax[1:end-1] .+ uFIX[1],log.(y1locmax[1:end-1] ./ y1locmax[2:end]),
+        #  PLOTaaa = scatter!(y1locmax[1:end-1]*0.0 .+ β, y1locmax[1:end-1] .+ uFIX[1],logdek,
         #      xlabel="β", ylabel="y1",zlabel="LogDek")
+        append!(xx, y1locmax[1:end-1] * 0.0 .+ β)
+        append!(yy, y1locmax[1:end-1] .+ uFIX[1])
+        append!(zz, logdek)
 
-        append!(x, y1locmax[1:end-1] * 0.0 .+ β)
-        append!(y, y1locmax[1:end-1] .+ uFIX[1])
-        append!(z, log.(y1locmax[1:end-1] ./ y1locmax[2:end]))
         #xlim=(0, 1e-2))
         #ylim=(0, 7))
 
@@ -204,13 +217,33 @@ for β = LinRange(7.79, 7.815, 50)#7.82
         # display(PLOTaaa)
 
     end
+
+    Imin = argmin(zz)
+    Nsmmoth=5
+    zzSmoth = movmean(zz, Nsmmoth)
+    append!(logdekmin,zzSmoth[Imin])
+    append!(logdekminY1,yy[Imin])
+
+    append!(x, xx)
+    append!(y, yy)
+    append!(z, zz)
     #plot!([0,0.003],[1.0,1.0] .* uFIX[1], linestyle=:dash,linewidth = 3,title="β: $β",        xlim=(-0.01, 1e-2))
 
+    theme(:dao)
+    foo(x) = (x > 0) ? (x) + 0.02 : 0
+    #foo(x)= x
+    #  BBplot=scatter(x, y; zcolor=foo.(z))
+
+    BBplot = scatter(y, z; zcolor=foo.(x))
+    plot!= scatter(yy, zz)
+    plot!(logdekminY1, logdekmin, linewidth=3)
+
+    display(BBplot)
 end
-gr()
-theme(:dao)
-foo(x) = (x > 0) ? (x) + 0.02 : 0
-#foo(x)= x
-scatter(x, y; zcolor=foo.(z))
 
 
+plotly()
+BBplot = scatter(y, z; zcolor=foo.(x))
+plot!(logdekminY1, logdekmin, linewidth=3)
+
+plot()
