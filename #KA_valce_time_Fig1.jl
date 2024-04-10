@@ -38,15 +38,15 @@ function valve_KF_DADE(y, h, p, t)
 end
 
 Base.:+(a::SVector, b::Bool) = a .+ b
-ζ = 0.25;
-δ = 3.0
-τ = pi / 3.0;
-β = 10.0
-Φ = 48.2
-q = 2.0;
-4.0;
-6.0;
-q = 6.0
+#ζ = 0.25;
+#δ = 3.0
+#τ = pi / 3.0;
+#β = 10.0
+#Φ = 48.2
+#q = 2.0;
+#4.0;
+#6.0;
+#q = 6.0
 
 
 ζ = 0.39
@@ -69,10 +69,10 @@ h(p, t) = SA[2.0, 0.0, 2.5, q*Φ/2]
 function calc_powi(powi)
     println(powi)
     println(10.0^powi)
-    
+
     T = τ * 2000
-    if powi<-10
-    T = τ * 20
+    if powi < -10
+        T = τ * 20
     end
     #M=diagm([1.0,1.0,1.0,1.0])
     #M=diagm([1.0,1.0,1.0,0.01])
@@ -98,43 +98,55 @@ function calc_powi(powi)
     return xx, y1, y2, y3, f
 end
 
-
-xx, y1, y2, y3, f = calc_powi(-2.0)
-plot(xx, y1)
-plot!(xx, y2)
-plot!(xx, y3)
-plot!(xx, f)
-
-
-#plotly()
-gr()
-#for powi = [collect(-2.5:-0.5:-4)...,-Inf]
-for powi = [collect(-2.5:-0.5:-4.0)...]
-#for powi = [collect(-2.5:-0.5:-4)...]
-
+ppal=cgrad([:purple, :green])
+using Colors
+powi=-2.0
+fp(x)=RGB((4+x)/2,0.2,1-(4+x)/2)
 xx, y1, y2, y3, f = calc_powi(powi)
-plot!(xx, y1)
-plot!(xx, y2)
-plot!(xx, y3)
-aa = plot!(xx, f)
-display(aa)
+plot(xx, y1,color_palette=ppal,linewidth = 2,color = fp(powi))
+plot!(xx, y2,color_palette=ppal,linewidth = 2,color = fp(powi))
+plot!(xx, y3,color_palette=ppal,linewidth = 2,color = fp(powi))
+plot!(xx, f,color_palette=ppal,linewidth = 2,color = fp(powi))
+
+
+
+#for powi = [collect(-2.5:-0.5:-4)...,-Inf]
+for powi = [collect(-2.:-0.5:-4.0)...]
+    #for powi = [collect(-2.5:-0.5:-4)...]
+    @show fp(powi)
+    xx, y1, y2, y3, f = calc_powi(powi)
+    plot!(xx, y1,color_palette=ppal,linewidth = 2,color = fp(powi))
+    plot!(xx, y2,color_palette=ppal,linewidth = 2,color = fp(powi))
+    plot!(xx, y3,color_palette=ppal,linewidth = 2,color = fp(powi))
+    aa = plot!(xx, f,color_palette=ppal,linewidth = 2,color = fp(powi))
+    display(aa)
 end
 
 xx, y1, y2, y3, f = calc_powi(-Inf)
-plot!(xx, y1,linecolor=:blue)
-plot!(xx, y2,linecolor=:blue)
-plot!(xx, y3,linecolor=:blue)
-aa = plot!(xx, f,linecolor=:blue)
+plot!(xx, y1, linecolor=:magenta,linewidth = 2)
+plot!(xx, y2, linecolor=:magenta,linewidth = 2,)
+plot!(xx, y3, linecolor=:magenta,linewidth = 2)
+aa = plot!(xx, f, linecolor=:magenta,linewidth = 2)
+
+
+
+#TODO: not working run-by-hand
+include("KF_valve_MethododSteps_sim_Fig1.jl")
+
+
+
+
+
 
 display(aa)
-aa = plot!(xlims=(00,500),ylims=(-10,260),xlabel="time",ylabel="y", dpi=1000, legend=false),
+aa = plot!(xlims=(00, 500), ylims=(-10, 260), xlabel="time", ylabel="y", dpi=1000, legend=false),
 display(aa)
 savefig("KF_valve_sim_Fig_all.png")
-aa = plot!(xlims=(450,500),ylims=(241-0.1,241.1),xlabel="time",ylabel="y", dpi=1000, legend=false)
+aa = plot!(xlims=(450, 500), ylims=(241 - 0.1, 241.1), xlabel="time", ylabel="y", dpi=1000, legend=false)
 display(aa)
 savefig("KF_valve_sim_Fig_zoom1.png")
-aa = plot!(xlims=(0,3),ylims=(200,250), dpi=1000, legend=false)
+aa = plot!(xlims=(0, 3), ylims=(200, 250), dpi=1000, legend=false)
 display(aa)
 savefig("KF_valve_sim_Fig_zoom2.png")
 
-
+println("DONE - All plots saved")

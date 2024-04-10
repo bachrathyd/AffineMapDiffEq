@@ -10,7 +10,6 @@ using Interpolations
 using LinearAlgebra
 using BenchmarkTools
 using Plots
-plotly()
 using Profile
 using StaticArrays
 using DifferentialEquations
@@ -89,7 +88,7 @@ sizehint!(f_final, 1_000_000)
 kt = 0
 #kt=10000
 #for kt in 0:10000
-for kt in 1:20
+for kt in 0:2000
     #kt += 1
 
     prob_valve_exp = DDEProblem(valve_KF_DADE_exp_fun, u0, h123, [0.0, T] .+ kt * τ, p, constant_lags=[τ])
@@ -100,13 +99,13 @@ for kt in 1:20
     resol = 1e-6
     sol_exp = solve(prob_valve_exp, MethodOfSteps(BS3()), reltol=resol, abstol=resol, dt=0.5)
 
-    plot!(sol_exp, linestyle=:dash)
+   # plot!(sol_exp, linestyle=:dash)
 
     h44 = y4_fun(sol_exp, p)
     fser = [h44(p, t) for t in sol_exp.t]
     
-    PLOTFIG=plot!(sol_exp.t, fser, linestyle=:dash,xlim=(0,sol_exp.t[end]),linewidth = 2)
-display(PLOTFIG)
+   # PLOTFIG=plot!(sol_exp.t, fser, linestyle=:dash,xlim=(0,sol_exp.t[end]),linewidth = 2)
+   # display(PLOTFIG)
     p = (ζ, δ, τ, β, Φ, q, h44)
     u0 = sol_exp[end]
 
@@ -129,3 +128,5 @@ plot!(t_final, getindex.(u_final,1),linecolor=:green,linestyle=:dash,linewidth =
 plot!(t_final, getindex.(u_final,2),linecolor=:green,linestyle=:dash,linewidth = 2)
 plot!(t_final, getindex.(u_final,3),linecolor=:green,linestyle=:dash,linewidth = 2)
 aa = plot!(t_final, f_final,linecolor=:green,linestyle=:dash,linewidth = 2)
+display(aa)
+println("MoS-Done")
