@@ -1,10 +1,10 @@
 10 + 10
 
 println(Threads.nthreads())
+
+
 using Revise
-#includet("src\\DDE_mapping.jl")
-includet("src\\DDE_mapping_types.jl")
-includet("src\\DDE_mapping_functions.jl")
+using DDE_mapping
 
 using BenchmarkTools
 using Plots
