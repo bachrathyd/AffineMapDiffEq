@@ -29,7 +29,7 @@ end
 
 
 function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
-    #mus = eigsolve(s -> LinMap(dp, s; p=p), size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
+    #mus = eigsolve(s -> LinMap(dp, s; p=p)[1], size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
     #s_start=[dp.Problem.u0 for _ in 1:Nstep] #TODO:fill!!!
     s_start = rand(typeof(dp.Problem.u0), Nstep)
@@ -37,14 +37,14 @@ function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
 
     #randsimilar!(s_start)
     #EIGEN BASED
-     # mus = eigsolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM)
+     # mus = eigsolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
     #ISSI BASED
     #mus = issi_eigen(dp::dynamic_problemSampled,p=p)
 
     #SCHUR BASED
-    mus = getindex(schursolve(s -> LinMap(dp, s; p=p), s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
     # T, vecs, vals, info = schursolve(...) with
 
 
@@ -68,12 +68,12 @@ end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #TODO: fixed dimension problem!!!!
-    v0 = LinMap(dp, s0; p=p)
+    v0 = LinMap(dp, s0; p=p)[1]
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
     s_start = rand(typeof(dp.Problem.u0), Nstep)
 
-    #TheMapping(s::T) = (LinMap(dp, s + s0; p=p) - v0)::T
+    #TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
   
     one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
     #if true#~DODOAU
@@ -81,7 +81,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #    s_start .*=  EPSI_TODO_REMOVE
     #else
         #println("Dual perturbation - it seems to be faster! ;-)")
-        TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p) - v0)::T
+        TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
     #end
 
     # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
@@ -101,12 +101,12 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
 
 
-    ###println(norm(s0 - LinMap(dp, s0; p=p)))
+    ###println(norm(s0 - LinMap(dp, s0; p=p)[1]))
     #TODO: it might be better to incluse the mus calcluations here too
     for k_fix_iteration in 1:40  #TODO:use input parameters for this with default value
-       s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2]))::T#TODO: kell a real? 
+       s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p)[1], mus[1], mus[2]))::T#TODO: kell a real? 
        # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
-        normerror = norm(s0 - LinMap(dp, s0; p=p))
+        normerror = norm(s0 - LinMap(dp, s0; p=p)[1])
         if (normerror) < 1e-5 #TODO:use input parameters for this with default value
             #println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
             break
@@ -114,7 +114,8 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     end
 
     #return mus[1]::Vector{ComplexF64}
-    return mus, s0::T
+    v0,sol=LinMap(dp, s0; p=p)
+    return mus, s0::T,sol
 end
 
 function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
@@ -136,7 +137,7 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
 
 end
 
-function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# where T
+function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # where T
 
     
 #global NNN +=1
@@ -173,7 +174,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# wh
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-     sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=dp.adaptive, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=dp.adaptive, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.Problem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
@@ -191,11 +192,11 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::T where T# wh
     #vv = reduce(vcat, v)
     #return vv::Vector{Float64}
     #return vv#::Vector{T}
-    return v
+    return v,sol
 end
 
 #function LinMapPerturbed(dp::dynamic_problemSampled, sv::Vector{Float64})::Vector{Float64}
-#    vv = LinMap(dp, s0 .+ sv) .- v0
+#    vv = LinMap(dp, s0 .+ sv)[1] .- v0
 #    return vv::Vector{Float64}
 #end
 
@@ -241,13 +242,13 @@ function issi_eigen(dp::dynamic_problemSampled; p=dp.Problem.p)
     ## if dp.zerofixpont
     ##     v0=s0
     ## else
-    v0 = LinMap(dp, s0; p=p)
+    v0 = LinMap(dp, s0; p=p)[1]
     ## end
     S = [rand(typeof(dp.Problem.u0), Nstep) for _ in 1:dp.eigN]
     H = zeros(Float64, dp.eigN, dp.eigN)#For Schur based calculation onlyS
     for _ in 1:12
-        #V = [LinMap(dp, Si; p=p) for Si in S]
-        V = [LinMap(dp, Si + s0; p=p) - v0 for Si in S] #TODO: ez nem jó, mert 
+        #V = [LinMap(dp, Si; p=p)[1] for Si in S]
+        V = [LinMap(dp, Si + s0; p=p)[1] - v0 for Si in S] #TODO: ez nem jó, mert 
         StS = [S[i]' * S[j] for i in 1:size(S, 1), j in 1:size(S, 1)]
         StV = [S[i]' * V[j] for i in 1:size(S, 1), j in 1:size(S, 1)]
         H = StS \ StV
