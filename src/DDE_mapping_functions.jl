@@ -1,5 +1,6 @@
 function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
-    zerofixpont=true, dt=maxdelay / Historyresolution, affineinteration=1,adaptive=false,KrylovTol=1e-12,KrylovExtraDim=5)
+    zerofixpont=true, affineinteration=1,KrylovTol=1e-12,KrylovExtraDim=5)
+    #dt=maxdelay / Historyresolution
 
     StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO: Float64!!!
     #eigs = zeros(ComplexF64, eigN)
@@ -7,8 +8,8 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, dt, StateSmaplingTime, eigN,
-    zerofixpont, affineinteration,adaptive,KrylovTol,KrylovExtraDim)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, StateSmaplingTime, eigN,
+    zerofixpont, affineinteration,KrylovTol,KrylovExtraDim)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.Problem, kwargs...)
@@ -124,9 +125,12 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
 
 #global NNN=0
     Nstep = size(dp.StateSmaplingTime, 1)
-    s0 = zeros(typeof(dp.Problem.u0), Nstep)
+    #s0 = zeros(typeof(dp.Problem.u0), Nstep)
+    s0 = [0.0* dp.Problem.u0 for _ in 1: Nstep]
     #s0 = rand(typeof(dp.Problem.u0), Nstep)
     ##affine(dp, s0; p=p)
+    ## println(s0)
+    ## println(typeof(s0))
     muSFix = affine(dp, s0; p=p)#First iteration
     for _ in 2:dp.affineinteration #secondary interation
         muSFix = affine(dp, muSFix[2]; p=p)
@@ -145,7 +149,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
     StateSmaplingTime = dp.StateSmaplingTime
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
-    dt = dp.dt
+
 
     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
@@ -174,7 +178,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-    sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=dp.adaptive, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
+    sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.Problem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
@@ -201,7 +205,6 @@ end
 #end
 
 function getvalues(sol::ODESolution, t::T) where T<:Real 
-
     if t < 0.0
         sol.prob.h(sol.prob.p, t)::typeof(sol.prob.u0)
     elseif t == 0.0
