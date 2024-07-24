@@ -1,5 +1,5 @@
-function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, eigN=4,
-    zerofixpont=true, affineinteration=1,KrylovTol=1e-12,KrylovExtraDim=5)
+function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, 
+    zerofixpont=true, affineinteration=1,Krylov_arg=())
     #dt=maxdelay / Historyresolution
 
     StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO: Float64!!!
@@ -8,8 +8,8 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, StateSmaplingTime, eigN,
-    zerofixpont, affineinteration,KrylovTol,KrylovExtraDim)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod,zerofixpont, affineinteration,
+    StateSmaplingTime,Krylov_arg)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.Problem, kwargs...)
@@ -45,7 +45,10 @@ function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
     #mus = issi_eigen(dp::dynamic_problemSampled,p=p)
 
     #SCHUR BASED
-    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+    #mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+
+#    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=3)), [3, 2, 1])
+    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.Krylov_arg...), [3, 2, 1])
     # T, vecs, vals, info = schursolve(...) with
 
 
@@ -62,9 +65,10 @@ end
 
 
 
-function partialpart(xSA::SVector)
+function partialpart(xSA)#::SVector)
     bb = [x.partials[1] for x in xSA]
     return SA[bb...]
+    #return MVector(bb...);
 end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
@@ -94,8 +98,10 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
     #TODO: in case of very high tolerance it will use all the krylovdim!!!
-    mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
-
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
+    mus = getindex(schursolve(TheMapping, s_start,dp.Krylov_arg...), [3, 2, 1])
+    
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
     #TODO: schursolve
     #println(size(mus[1],1))

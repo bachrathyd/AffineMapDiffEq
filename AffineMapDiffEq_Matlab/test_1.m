@@ -44,7 +44,7 @@ for k=1:40%fixpoint iteration s0 will (should) converge to the fixpoint
     par.doplot=true;
     s0flat =real( v0flat - V * ( (V'*V) \ (V' * (v0flat-s0flat)) .* ((d) ./ (d - 1.0))) ) ;% imaginary part is created only by numerical errors
     v0flat=LinMapsqueeze(s0flat,par);
-    errorestimation=norm(v0flat-s0flat)/numel(s0flat)
+    errorestimation=norm(v0flat-s0flat)/numel(s0flat);
     if (errorestimation)<1e-10
         a0flat=s0flat;
         break
@@ -72,6 +72,7 @@ subplot(2,2,3)
 plot(par.StateSmapled,a0)
 
 %long simulation from the fix point s0
+%it stay closed for "long" time even in case of unstable fixpoint
 subplot(2,2,4)
 par.T = 2.0*pi*20; % Pariod of Mapping
 par.doplot=true;
