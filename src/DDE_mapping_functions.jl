@@ -105,17 +105,23 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
     #TODO: schursolve
     #println(size(mus[1],1))
-    s0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
 
-
-    ###println(norm(s0 - LinMap(dp, s0; p=p)[1]))
+    #println("Fix point calculation ---------- Start")
+    #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
     #TODO: it might be better to incluse the mus calcluations here too
-    for k_fix_iteration in 1:40  #TODO:use input parameters for this with default value
-       s0 = real.(find_fix_pont(s0, LinMap(dp, s0; p=p)[1], mus[1], mus[2]))::T#TODO: kell a real? 
+    for k_fix_iteration in 1:50  #TODO:use input parameters for this with default value
+       # println("find_fix_pont_start")
+        s0=a0;
+        v0=LinMap(dp, s0; p=p)[1];
+        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T#TODO: kell a real? 
+       # println("find_fix_pont_end")
        # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
-        normerror = norm(s0 - LinMap(dp, s0; p=p)[1])
-        if (normerror) < 1e-5 #TODO:use input parameters for this with default value
-            #println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+        normerror = norm(s0 - v0)
+       # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+        if (normerror) < 1e-15 #TODO:use input parameters for this with default value
+         #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+          #  println("Fix point calculation ---------- End")
             break
         end
     end
