@@ -41,7 +41,7 @@ using MAT
 
 # Governing equation
 
-function duffing_chain(x, h, p, t)
+function duffing_chain(x::T, h, p, t)::T where T
     k1, k3, d, l0, idx_nonlin, gamma, omega = p
     n = size(x, 1) ÷ 2
     q = x[1:n]
@@ -130,7 +130,7 @@ duffing_chain(u0, h, p, 0.0)
 
 @time sol = solve(probDC; Solver_args...);#abstol,reltol
 #plot(sol)
-
+@profview solve(probDC; Solver_args...);#abstol,reltol
 
 #last period of the long simulation:
 t_select_period = 0.0:0.01:T
@@ -206,6 +206,24 @@ plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
 plot!(dpDC.StateSmaplingTime, getindex.(mu[2][1], 1))
 plot(mu[2][3][1])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # ----------------------- creating stability chart -------------------------
 
