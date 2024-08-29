@@ -234,9 +234,13 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
  #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
  #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
     AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+
+   # println("------------------------------------")
+   # println(AtA)
     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
     ci = AtA \ Atx
-    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))
+    #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
 
