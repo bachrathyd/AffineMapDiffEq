@@ -124,17 +124,31 @@ plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
 
 # fix point and spectrum test---------------------------
+# perturbation test
+p_pert=[ϵ, γ, α, ω+one_espilon_Dual]
+
 
 using ForwardDiff
 one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
 p_dual = [ϵ, γ, α, ω+one_espilon_Dual]
 
+ForwardDiff.partials
 
-Δv0=(LinMap(dpDuffing, s0aff; p=[ϵ, γ, α, ω+1e-5])[1]-LinMap(dpDuffing, s0aff; p=[ϵ, γ, α, ω])[1])/1e-5
+for epsss in 10.0 .^ (0:-1:-15)
+   # epsss=10.0^-7
+Δv0=(LinMap(dpDuffing, s0aff; p=[ϵ, γ, α, ω+epsss])[1]-LinMap(dpDuffing, s0aff; p=[ϵ, γ, α, ω])[1])/epsss
 
+dv0dλ=DDE_mapping.partialpart.(LinMap(dpDuffing, s0aff ; p=p_pert)[1])
+DDE_mapping.valuepart.(p_pert)
+@show (Δv0 .- dv0)'  * (Δv0 .- dv0)
+end
 
-dv0=LinMap(dpDuffing, s0aff; p=[ϵ, γ, α, ω+one_espilon_Dual])[1]
-partialpart.(dv0)
+D = Diagonal(10:10:50)
+using LinearAlgebra
+M = diagm(0 => 10:10:50)
+using SparseArrays: spdiagm
+S = spdiagm(0 => 10:10:50)
+
 ## --------------- bifurcation test - "continuation" -------------
 using KrylovKit
 Neig =2#number of required eigen values
@@ -225,21 +239,24 @@ function add_a_point!(Solset, requiredstepsize, parindex=4)
     p2 = Solset[end][3].prob.p[parindex]
     p1 = Solset[end-1][3].prob.p[parindex]
     p0 = Solset[end-2][3].prob.p[parindex]
-    pghange = (p2 - p1)
-
+    Δλ = (p2 - p1)
+    
     #muaff, s0aff, solPeriod = affine(dpDuffing, s0aff; p=(ϵ, γ, α, ω))
     Mscaler = 1 / 100/length(Solset[end][2])
-    XnormChange=(Solset[end][2]-Solset[end-1][2])' *(Solset[end][2]-Solset[end-1][2])
+
+    Δu=Solset[end][2]-Solset[end-1][2]
+    XnormChange=Δu' *Δu
     #Xnorm2 = Solset[end][2]' * Solset[end][2]
     #Xnorm1 = Solset[end-1][2]' * Solset[end-1][2]
     #XnormChange = (Xnorm2 - Xnorm1)
 
+    Δu_Δλ=Δu/Δλ
 
-    perviouse_stepsize = sqrt((XnormChange * Mscaler)^2 + pghange^2)
+    perviouse_stepsize = sqrt((XnormChange * Mscaler)^2 + Δλ^2)
 
     scaling = abs( requiredstepsize / perviouse_stepsize)
 
-    pnew = p2 + scaling * pghange
+    pnew = p2 + scaling * Δλ
     pall[parindex] = pnew
 
     omega   =pnew
@@ -256,7 +273,9 @@ function add_a_point!(Solset, requiredstepsize, parindex=4)
    #pnew = 2.0*p2 -1.5*p1+0.5*p0
    #S0aff_new =2.0* Solset[end][2] - 1.5* Solset[end-1][2]+0.5* Solset[end-2][2]
 # S0aff_new = (1.0 + scaling) * Solset[end][2] - scaling * Solset[end][2]
-    push!(Solset, affine(dpDuffing_loc, S0aff_new; p=pall))
+
+
+    push!(Solset, affine(dpDuffing_loc, S0aff_new; p=pall+[0.0,0.0,0.0,one_espilon_Dual]))
 end
     
         
@@ -266,13 +285,14 @@ Neig = 2#number of required eigen values
 Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-25,krylovdim=4,  verbosity=0));
 
 
-
 requiredstepsize = 0.025
 p_index = 4
 println("NINCS  gerjesztés és a periodus idő a rendszerhez állítva!!!!!!!4- HIBÁS")
-Sols = [affine(dpDuffing; p=[ϵ, γ, α, 0.2]), affine(dpDuffing; p=[ϵ, γ, α, 0.2 + requiredstepsize])];
-Sols = [affine(dpDuffing; p=[ϵ, γ, α, 1.5]), affine(dpDuffing; p=[ϵ, γ, α, 1.5 - requiredstepsize])];
-Sols = [ affine(dpDuffing; p=[ϵ, γ, α, 0.2 + k* requiredstepsize]) for k in 0:2];
+#Sols = [affine(dpDuffing; p=[ϵ, γ, α, 0.2]), affine(dpDuffing; p=[ϵ, γ, α, 0.2 + requiredstepsize])];
+#Sols = [affine(dpDuffing; p=[ϵ, γ, α, 1.5]), affine(dpDuffing; p=[ϵ, γ, α, 1.5 - requiredstepsize])];
+Sols = [ affine(dpDuffing; p=[ϵ, γ, α, 0.2 + k* requiredstepsize+one_espilon_Dual]) for k in 0:2];
+
+
 
 #requiredstepsize = -0.025
 #Sols = [ affine(dpDuffing; p=[ϵ, γ, α, 1.8 + k* requiredstepsize]) for k in 0:5];

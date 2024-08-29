@@ -71,9 +71,20 @@ function partialpart(xSA)#::SVector)
     #return MVector(bb...);
 end
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
+
+function valuepart(xSA)#::SVector)
+    bb = [x.value[1] for x in xSA]
+    return SA[bb...]
+    #return MVector(bb...);
+end
+
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,Δu_Δλ=s0 .* 0.0) where T
     #TODO: fixed dimension problem!!!!
-    v0 = LinMap(dp, s0; p=p)[1]
+    v0_dual = LinMap(dp, s0; p=p)[1]
+    v0=valuepart.(v0_dual)
+    dv0dλ=partialpart.(v0_dual)
+    
+
     #println(norm(s0-v0))
     Nstep = size(dp.StateSmaplingTime, 1)
     s_start = rand(typeof(dp.Problem.u0), Nstep)
@@ -105,7 +116,10 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
     #TODO: schursolve
     #println(size(mus[1],1))
-    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+
+
+#    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2],dv0dλ,Δu_Δλ))::T
 
     #println("Fix point calculation ---------- Start")
     #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
@@ -239,6 +253,7 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
    # println(AtA)
     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
     ci = AtA \ Atx
+    
     #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
     ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
@@ -247,6 +262,54 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
     return fix_v
 end
+
+function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec,dv0dλ,Δu_Δλ)
+    x = (v0 - s0)
+
+    ##AtA = conj( eigvec' .* eigvec)
+ #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+ #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+
+   # println("------------------------------------")
+   # println(AtA)
+    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    ci = AtA \ Atx
+    
+    #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
+    #A=transpose(mapreduce(permutedims, vcat, eigvec))
+    #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
+
+    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+    return fix_v
+end
+
+
+
+#function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval::AbstractVector,eigvec::Vector{<:AbstractVector})
+function Constratint_find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
+    x = (v0 - s0)
+
+    ##AtA = conj( eigvec' .* eigvec)
+ #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+ #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+
+   # println("------------------------------------")
+   # println(AtA)
+    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    ci = AtA \ Atx
+    
+    #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
+    #A=transpose(mapreduce(permutedims, vcat, eigvec))
+    #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
+
+    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+    return fix_v
+end
+
 
 function interpolate_complex_on_grid(x0::AbstractVector, t0::Float64, dt::Float64, x::Float64)
     idx = clamp(floor(Int, (x - t0) / dt), 0, length(x0) - 2)
