@@ -75,8 +75,8 @@ scatter(Float64[], Float64[], Float64[])
 ζ = 0.39
 δ = 3.0
 τ = 0.25
-for β = LinRange(5,9,40)#7.82
-#for β = LinRange(7.0, 7.9, 30)#7.82
+#for β = LinRange(5,9,40)#7.82
+for β = LinRange(7.0, 7.9, 30)#7.82
 #for β = LinRange(7.72, 7.82, 30)#7.82
 #for β = LinRange(7.79, 7.803,40)#7.82
     #for β = LinRange(7.79, 7.815, 50)#7.82
@@ -102,7 +102,8 @@ for β = LinRange(5,9,40)#7.82
 
 
 
-    for Nmutip in 1.95:-0.205:1.02#1.75:-0.01:1.05#0.1:0.1:2
+    #for Nmutip in 1.95:-0.105:1.02#1.75:-0.01:1.05#0.1:0.1:2
+        for Nmutip in 1.95:-0.025:1.02#1.75:-0.01:1.05#0.1:0.1:2
         println("Nmutip: $Nmutip")
         Base.:+(a::SVector, b::Bool) = a .+ b
 
@@ -137,7 +138,7 @@ for β = LinRange(5,9,40)#7.82
         kt = 0
         #kt=10000
         #for kt in 0:10000
-        for _ in 0:1000#250#2500
+        for _ in 0:1000#1000#250#2500
             kt += 1
             #if mod(kt, 50) == 0
             #    println(kt)
@@ -146,8 +147,8 @@ for β = LinRange(5,9,40)#7.82
 
             #@time 
             #sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-14, abstol=1e-14)
-            #sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-11, abstol=1e-11)
-            sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-8, abstol=1e-8)
+            sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-11, abstol=1e-11)
+            #sol_exp = solve(prob_valve_exp, MethodOfSteps(Rodas5()), reltol=1e-8, abstol=1e-8)
             #sol_exp = solve(prob_valve_exp, MethodOfSteps(BS3()),        reltol=1e-5, abstol=1e-5,dt=0.5)
 
             #plot!(sol_exp, linestyle=:dash)
@@ -182,9 +183,9 @@ for β = LinRange(5,9,40)#7.82
 
         Npoints = size(t_final, 1)
 
-        t_final = t_final[floor(Int, Npoints * 0.6):end]
-        u_final = u_final[floor(Int, Npoints * 0.6):end]
-        f_final = f_final[floor(Int, Npoints * 0.6):end]
+        t_final = t_final[floor(Int, Npoints * 0.3):end]
+        u_final = u_final[floor(Int, Npoints * 0.3):end]
+        f_final = f_final[floor(Int, Npoints * 0.3):end]
 
         #plotly()
         #plot(t_final, getindex.(u_final, 1), linewidth=3)#, linestyle=:dash
@@ -280,17 +281,28 @@ scatter(y, z; zcolor=foo.(x))
 BBplot = plot!(logdekminY1, logdekmin, linewidth=3, xlabel="Y_1", ylabel="Λ_min")
 
 ##Linear fit
-beta = sum((logdekminbeta .- mean(logdekminbeta)) .* (logdekmin .- mean(logdekmin))) /
+a1 = sum((logdekminbeta .- mean(logdekminbeta)) .* (logdekmin .- mean(logdekmin))) /
        sum((logdekminbeta .- mean(logdekminbeta)) .* (logdekminbeta .- mean(logdekminbeta)))
-alfa = mean(logdekmin) - beta * mean(logdekminbeta)
+a0 = mean(logdekmin) - a1 * mean(logdekminbeta)
 
-scatter(logdekminbeta, logdekmin, linewidth=3)
-plot!([minimum(logdekminbeta), 7.9], [minimum(logdekminbeta), 7.9] * beta .+ alfa)
-AAplot = scatter!([-alfa / beta], [0], title=-alfa / beta, xlabel="β", ylabel="Λ_min")
+βkrit_linear_fit=-a0 / a1
+scatter( logdekminbeta,logdekmin, linewidth=3)
+plot!([minimum(logdekminbeta), 7.9], [minimum(logdekminbeta), 7.9] * a1 .+ a0)
+AAplot = scatter!([βkrit_linear_fit], [0], title=-βkrit_linear_fit, xlabel="β", ylabel="Λ_min")
 
 display(plot(BBplot, AAplot))
 
 
+savefig("KF_valve_sim_Fig_Fold_predict.svg")
+
+
+using Interpolations
+interp_linear = linear_interpolation(logdekmin[end:-1:1], logdekminY1[end:-1:1])
+Ykrit=interp_linear(0)
+interp_linear = linear_interpolation(logdekmin[end:-1:1], logdekminbeta[end:-1:1])
+βkrit_inerp=interp_linear(0)
+plot(logdekmin[end:-1:1], logdekminY1[end:-1:1])
+scatter!([0.0],[Ykrit])
 ##
 file = matopen("q10_bif.mat")
 xH = read(file, "xH")
@@ -316,10 +328,21 @@ plotly()
 Ndrop = 1
 foo(x) = (x > 0) ? log(x) : log(x)
 scatter((x[z.>0.0][1:Ndrop:end]), (y[z.>0.0][1:Ndrop:end]); zcolor=foo.(z[z.>0.0][1:Ndrop:end]))
-scatter!([xH], [yH])
+scatter([xH], [yH])
 plot!(xFup[:], yFup[:])
 plot!(xFdown[:], yFdown[:])
 plot!(xFix[:], yFix[:])
 plot!(xFup2[:], yFup2[:])
 plot!(xFdown2[:], yFdown2[:])
 plot!(logdekminbeta, logdekminY1)
+
+
+#aaa=scatter!([βkrit_linear_fit],[Ykrit],xlims=(7.75, 7.85))
+aaa=scatter!([βkrit_inerp],[Ykrit],xlims=(7.75, 7.85))
+display(aaa)
+
+
+
+savefig("KF_valve_sim_bif_plot_with_interpolation.svg")
+
+
