@@ -32,8 +32,6 @@ qd(n+1) = 0; % BC for brush model / no deformation at the leading edge
 Fy = 0;
 Mz = 0;
 
- Fy = Fy + k * (0+q(i))/2 * dx;
- Mz = Mz + k * (0+x(i))/2 * (1+q(i))/2*dx;
 for i=2:n+1
     Fy = Fy + k * (q(i)+q(i-1))/2 * dx;
     Mz = Mz + k * (x(i)+x(i-1))/2 * (q(i)+q(i-1))/2*dx;
