@@ -169,7 +169,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     Hist_interp_linear = scale(itp, StateSmaplingTime)
     #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
+    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépés, akkor ez nem is kell!!!
     hint(p, t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
     #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
 
