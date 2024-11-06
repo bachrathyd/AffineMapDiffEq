@@ -16,8 +16,8 @@ b_1 = 3e-3#size of crosssection vertivcal
 Area = a_1 * b_1
 Inertia = a_1 * b_1^3 / 12
 
-EI = E_modulus * Inertia
-ρA = Area * ρ_densitiy
+EI = E_modulus * Inertia #9.45
+ρA = Area * ρ_densitiy #0.468
 
 
 
@@ -46,8 +46,8 @@ BC_time(t) = 0.01 * exp(-((t -0.02) / 0.005)^2)
 #BC_time(x, t)  = BT_time(t)
 #BC_time(t) = 0.01 * sin(ω*t)
 BC_time(x, t)  = BC_time(t)
-#display(plot(w0.(LinRange(0, L, 500))))
-#display(plot(BC_time.(LinRange(0, Tend, 500))))
+display(plot(LinRange(0, L, 500),w0.(LinRange(0, L, 500))))
+display(plot(BC_time.(LinRange(0, Tend, 500))))
 
 
 #eq = [ρA * Dtt(w(x, t)) + η(x)*Dt(w(x, t)) + Dxx(EI*(Dxx(w(x, t))))~ + q(x, t) ]
@@ -77,11 +77,11 @@ domains = [x ∈ Interval(x_min, x_max),
 #else
 # # Boundary conditions - #Clamped-Clamped
 bcs = [w(x, 0) ~ w0(x, t),
-    Dt(w(x, 0)) ~ 0.0,
-    w(0, t) ~ 0.0,#BC_time(t),
-    Dx(w(0, t)) ~ 0.0,
-    w(x_max, t) ~ 0.0,
-    Dx(w(x_max, t)) ~ 0.0]
+      Dt(w(x, 0)) ~ 0.0,
+      w(0, t) ~ 0.0,
+      Dx(w(0, t)) ~ 0.0,
+      w(x_max, t) ~ 0.0,
+      Dx(w(x_max, t)) ~ 0.0]
 #end
 
 
@@ -127,10 +127,11 @@ display(gif(anim, "Beam_vibration_1.gif", fps = 25))
 println("-------------------------------- DONE --------------------------------")
 
 ##
+
 @time sol_no_wrap = solve(prob, Tsit5(), reltol=1e-6, dtmax=1e-3; wrap = Val(false))
-plot(sol_no_wrap(0.1)[501:end])
+plot(sol_no_wrap(0.0001)[N+1:end])
 anim = @animate for tloc in LinRange(0, Tend, 500)
-    plot(sol_no_wrap(tloc)[500:end], title="$tloc",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
+    plot(sol_no_wrap(tloc)[N+1:end], title="$tloc",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
 end
 display(gif(anim, "Beam_vibration_time.gif", fps = 25))
 ##
@@ -174,7 +175,7 @@ display(gif(anim, "Beam_vibration_time.gif", fps = 25))
 
 
 
-
+# TODO: The followings notworking!!!
 
 
 

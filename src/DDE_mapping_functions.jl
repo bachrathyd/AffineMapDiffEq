@@ -67,8 +67,8 @@ end
 
 function partialpart(xSA)#::SVector)
     bb = [x.partials[1] for x in xSA]
-    return SA[bb...]
-    #return MVector(bb...);
+    #return SA[bb...]
+    return MVector(bb...);
 end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T

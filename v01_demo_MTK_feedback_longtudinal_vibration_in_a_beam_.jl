@@ -1,4 +1,5 @@
 #Longitudinal_vib_PDF with feedback from the boundaries
+#TODO: az erő (amit visszacsatolunk a másik oldalon) is benne van. Azt kell megoldani, hogy ez valahogy késleltetve is legyen...
 
 # WORKING verstion!!!!!!!!!!!!!!!!!
 
@@ -134,9 +135,9 @@ println("-------------------------------- DONE --------------------------------"
 ### 
 ### ##
 ### @time sol_no_wrap = solve(prob, Tsit5(), reltol=1e-3, dtmax=1e-2; wrap = Val(false))
-### plot(sol_no_wrap(0.1)[501:end])
+### plot(sol_no_wrap(0.1)[N+1:end])
 ### anim = @animate for tloc in LinRange(0, Tend, 500)
-###     plot(sol_no_wrap(tloc)[500:end], title="$tloc",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
+###     plot(sol_no_wrap(tloc)[N+1:end], title="$tloc",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
 ### end
 ### display(gif(anim, "Beam_vibration_time.gif", fps = 25))
 ### ##
