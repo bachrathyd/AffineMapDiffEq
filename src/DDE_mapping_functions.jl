@@ -283,3 +283,187 @@ function issi_eigen(dp::dynamic_problemSampled; p=dp.Problem.p)
 
     return Eigvals[p], S[p]
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#--------------- Functions --------------------
+using LinearAlgebra
+using Integrals
+
+#LinearAlgebra.norm(v): compute the 2-norm of a vector
+function LinearAlgebra.norm(v::ODESolution)::Float64
+    domain = v.prob.tspan # (lb, ub)
+    println(typeof(v))
+    prob = IntegralProblem((p,t) ->norm(v.prob.h(p,t)), domain)
+    integratedvalue = solve(prob, HCubatureJL(); reltol = 1e-3, abstol = 1e-3)#/(domain[2]-domain[1])
+
+    return integratedvalue.u ::Float64
+end
+
+
+#Base.:*(α, v): multiply v with a scalar α, which can be of a different scalar type; in particular this method is used to create vectors similar to v but with a different type of underlying scalars.
+function Base.:*(α::N, v::ODESolution)::ODESolution where {N<:Number}
+    Tmap=v.t[end]
+    return solve(remake(v.prob; u0= α *v.prob.u0, h=(p,t)->α .* v.prob.h(p,t));alg = MethodOfSteps(RK4()), verbose = false, reltol = 1e-4)
+end
+#foo = 10.0 * his
+#foo([1,2], -1.3)
+
+#function Base.:+(v::ODESolution, w::ODESolution)::ODESolution
+#    ????
+#end
+
+
+
+
+#Base.similar(v): a way to construct vectors which are exactly similar to v
+function Base.similar(v::ODESolution)::ODESolution
+    # #TODO: return an error if v is also empty - maybe it is not a problem
+     wout=0.0 * v
+     #empty!(v)
+ end
+ #TODO: this is  bug (or feature): foo([1,2], -1.3)
+ 
+
+
+
+
+
+
+
+
+
+#function empty!(w::ODESolution)::ODESolution
+#    deleteat!(w.f, eachindex(w.f))#TODO:it is might be not necessary, but it is safe
+#    deleteat!(w.scaler, eachindex(w.scaler))#TODO:it is might be not necessary, but it is safe
+#    #w.range .= 0.0
+#    return w
+#end
+
+
+
+#LinearAlgebra.mul!(w, v, α): out of place scalar multiplication; multiply vector v with scalar α and store the result in w
+function LinearAlgebra.mul!(w::ODESolution, v::ODESolution, α::Number)::ODESolution
+    empty!(w)
+    append!(w.f, v.f)
+    append!(w.scaler, α .* v.scaler)
+    w.range .= v.range
+    return w
+end
+
+
+#LinearAlgebra.rmul!(v, α): in-place scalar multiplication of v with α; in particular with α = false, v is the corresponding zero vector
+function LinearAlgebra.rmul!(v::ODESolution, α::Number)::ODESolution
+    v.scaler .*= α
+    return v::ODESolution
+end
+
+#LinearAlgebra.axpy!(α, v, w): store in w the result of α*v + w
+function LinearAlgebra.axpy!(α::Number, v::ODESolution, w::ODESolution)::ODESolution
+
+   # println("..............")
+   # println(α)
+#
+   # println("-----------")
+   # println(size(w.f, 1))
+   # println(size(v.f, 1))
+   # println("-----------")
+   # println(size(w.scaler, 1))
+   # println(size(v.scaler, 1))
+   # println(size(w.range, 1))
+   # println(size(v.range, 1))
+
+
+    append!(w.f, v.f)
+    append!(w.scaler, α .* v.scaler)
+    w.range[1] = maximum([v.range[1], w.range[1]])
+    w.range[2] = minimum([v.range[2], w.range[2]])
+
+
+
+    return reduce!(w)
+end
+
+#TODO: ezzel lenne jó convert(::Type{ODESolution}, x::F) where F<:Function= ODESolution(x)::ODESolution
+function LinearAlgebra.axpy!(α::Number, v::ODESolution, fw::Function)::ODESolution
+    LinearAlgebra.axpy!(α, v, ODESolution(fw, v.range))
+end
+
+
+
+#LinearAlgebra.axpby!(α, v, β, w): store in w the result of α*v + β*w
+function LinearAlgebra.axpby!(α::Number, v::ODESolution, β::Number, w::ODESolution)::ODESolution
+    reduce!(axpy!(α, v, rmul!(w, β)))
+end
+
+
+
+function collapse!(fc::ODESolution)::ODESolution
+    for i in length(fc.f):-1:1
+        if typeof(fc.f[i]) <: ODESolution
+            for kf in eachindex(fc.f[i].f)
+                #push!(fc.f, pop!(fc.f[i].f))
+                #push!(fc.scaler, fc.scaler[i] .* pop!(fc.f[i].scaler))
+                push!(fc.f, fc.f[i].f[kf])
+                push!(fc.scaler, fc.scaler[i] .* fc.f[i].scaler[kf])
+            end
+
+            fc.range[1] = maximum([fc.range[1], fc.f[i].range[1]])
+            fc.range[2] = minimum([fc.range[2], fc.f[i].range[2]])
+
+            deleteat!(fc.f, i)
+            deleteat!(fc.scaler, i)
+        end
+    end
+    return fc
+end
+
+function reduce!(fc::ODESolution)::ODESolution
+
+    while any(typeof.(fc.f) .<: ODESolution)
+        collapse!(fc)
+    end
+    fsunique = unique(fc.f)
+    
+    newscales = [sum(fc.scaler[fc.f.==fu]) for fu in fsunique]
+
+    empty!(fc)#range is not deleted!!!
+
+    append!(fc.f, fsunique)
+    append!(fc.scaler, newscales)
+
+    return fc
+end
+
+
+
+#TODO: ehhez kell a struktúrába valami range (validity range-et definiálni)
+using Integrals
+#LinearAlgebra.dot(v,w): compute the inner product of two vectors
+function LinearAlgebra.dot(v::ODESolution, w::ODESolution)::Float64
+    #TODO: nem az egészet kell összeintegrálni, 
+    #TODO: nem jók az idők, mert a függvény az csak a hsitory function. Csak a mappingben kell a sol és abból kivenni a cuccot...
+
+    tstart = maximum([v.range[1], w.range[1]])
+    tend = minimum([v.range[2], w.range[2]])
+
+    prob = IntegralProblem((t, p) -> v(t)' * w(t), tstart, tend)
+    VW = solve(prob, HCubatureJL(),reltol=1e-5, abstol=1e-5).u# 
+    #println(VW)
+    return VW::Float64
+end
+
+
+
+
