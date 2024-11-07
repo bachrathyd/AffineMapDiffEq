@@ -5,7 +5,6 @@
 
 
 using ModelingToolkit, MethodOfLines, OrdinaryDiffEq, DifferentialEquations, DomainSets
-
 using Plots
 
 # Define constants (replace with your specific values)
@@ -25,7 +24,7 @@ EI = E_modulus * Inertia #9.45
 η(x) = η0#damping
 
 L = 10.0 # Length of the beam
-Tend = 1.5 # end time
+Tend = 0.15 # end time
 
 @parameters x t
 @variables w(..)
@@ -101,7 +100,7 @@ println("Discretization:")
 
 
 println("Solve:")
-@time sol = solve(prob, Tsit5(), reltol=1e-3, dtmax=1e-2)
+@time sol = solve(prob, Tsit5(), reltol=1e-3, dtmax=1e-4)
 #@time sol = solve(prob, TRBDF2(), reltol=1e-3, dtmax=1e-2)
 
 discrete_x = sol[x]
@@ -119,13 +118,14 @@ display(heatmap(discrete_t[1:1:end],discrete_x,solw[:,1:1:end]))
 ##
 
 # Make an animation
-anim = @animate for k in 1:10:(length(discrete_t)÷1)
+anim = @animate for k in 1:2:(length(discrete_t)÷1)
     plot(discrete_x,solw[1:end, k], title="$(discrete_t[k])",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
 end
 display(gif(anim, "Beam_vibration_1.gif", fps = 25))
 
 println("-------------------------------- DONE --------------------------------")
 
+<<<<<<< Updated upstream:v01_demo_MTA_Bendig_vibrations_partial_diff_eq_cntrolled_beam.jl
 ##
 
 @time sol_no_wrap = solve(prob, Tsit5(), reltol=1e-6, dtmax=1e-3; wrap = Val(false))
@@ -135,6 +135,16 @@ anim = @animate for tloc in LinRange(0, Tend, 500)
 end
 display(gif(anim, "Beam_vibration_time.gif", fps = 25))
 ##
+=======
+###
+#@time sol_no_wrap = solve(prob, Tsit5(), reltol=1e-6, dtmax=1e-3; wrap = Val(false))
+#plot(sol_no_wrap(0.1)[501:end])
+#anim = @animate for tloc in LinRange(0, Tend, 500)
+#    plot(sol_no_wrap(tloc)[500:end], title="$tloc",ylim=(-0.01,0.01)) # 2:end since end = 1, periodic condition
+#end
+#display(gif(anim, "Beam_vibration_time.gif", fps = 25))
+###
+>>>>>>> Stashed changes:_v01_demo_MTA_Bendig_vibrations_partial_diff_eq_cntrolled_beam.jl
 
 
 #TODO:  Eddig kellene működnie, de kell majd velemi ellnőrzés.
