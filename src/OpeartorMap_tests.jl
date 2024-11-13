@@ -24,6 +24,7 @@ function DelayMathieu(u, h, p, t)
     ddx = -(δ + ϵ * cos(2pi * t / T)) * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] + F
     # Update the derivative vector
     SA[dx, ddx]
+    #MVector(dx, ddx)
 end
  
 ## parameters
@@ -40,7 +41,8 @@ p = ζ, δ, ϵ, b, τ, T
  
 # test simulation ---------------
 #history function
-h(p, t) = SA[10; 0.0]
+h(p, t) = SA[10.0; 0.0]
+#h(p, t) = MVector(10.0, 0.0)
 ##initial condition
 #u0 = SA[1.0, 0.0]
 #probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 1000.0), p; constant_lags=[τ])
@@ -65,12 +67,15 @@ plot(sol)
  
 
 # ---------------- Affine mapping ---------------------------
-
+using Revise
 using DDE_mapping
-using KrylovKit
+using KrylovKit #TODO: Now it is @6.1 version, ugrade by: pin DataFrames leading to errors
 
 Base.:+(a::SVector, b::Bool) = a .+ b
 Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
+
+Base.:+(a::MVector, b::Bool) = a .+ b
+Base.:+(a::MVector, b::Float64) = a .+ b #TODO: where to put this?
 
 
 Neig=4#number of required eigen values
@@ -86,42 +91,34 @@ Timeperiod; Historyresolution=Nstep,
     zerofixpont=false,    affineinteration=1,
     Krylov_arg=Krylov_arg)
 
-    @time mu, saff, sol0 = affine(dpMathieu; p=p);
-  #  @benchmark affine(dpMathieu; p=p)
+@time mu, saff, sol0 = affine(dpMathieu; p=p);
+#  @benchmark affine(dpMathieu; p=p)
+   
+  # Comparing the solutions:
+  #plot(sol_period[1, :], sol_period[2, :], marker=:circle,markersize=6,lab="")
+  plot(getindex.(saff,1), getindex.(saff,2), marker=:circle,markersize=4,lab="")#
+  plot!(sol0[1, :], sol0[2, :], marker=:circle,lw = 0,lab="")#marker=:cross,markersize=2)#
+  ##
+  
+  
+  # Plotting the Floquet multipliers
+  #in log scale
+  plot(log.(abs.(mu[1])))
+  #in complex plane
+  scatter(mu[1])
+  plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
+  
+## ----------testing the operator - like behavioure
  
-# Comparing the solutions:
-#plot(sol_period[1, :], sol_period[2, :], marker=:circle,markersize=6,lab="")
-plot(getindex.(saff,1), getindex.(saff,2), marker=:circle,markersize=4,lab="")#
-plot!(sol0[1, :], sol0[2, :], marker=:circle,lw = 0,lab="")#marker=:cross,markersize=2)#
-##
-
-
-# Plotting the Floquet multipliers
-#in log scale
-plot(log.(abs.(mu[1])))
-#in complex plane
-scatter(mu[1])
-plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
-
-## -----------testing the operator - like behavioure
  
- 
-#function getvalues(sol::ODESolution, t::T) where {T<:Real}
-#    if t < 0.0
-#        sol.prob.h(sol.prob.p, t)::typeof(sol.prob.u0)
-#    elseif t == 0.0
-#        sol.prob.u0::typeof(sol.prob.u0)
-#    else
-#        sol(t)::typeof(sol.prob.u0)
-#    end
-#end
 
 using FunctionWrappers
 import FunctionWrappers: FunctionWrapper
  
-#using Revise
+using Revise
 include("fucntion_composition.jl")
-include("sol_operator_functions.jl")
+#include("sol_operator_functions.jl")
+include("ReangedFun.jl")
 
 mutable struct CallbackS2_F64 <: Function
     f::FunctionWrapper{SVector{2, Float64},Tuple{Float64}}
@@ -136,8 +133,8 @@ typeof(fXX)
 
 FX_FC=funcomp(fXX,[-τ,0.0])
 #FX_FC=funcomp{Float64,SVector{2, Float64}}((t) -> sol.prob.h(p,t),[-τ,0.0])
-FX_FC=funcomp((t) -> sol.prob.h(p,t),[-τ,0.0])
-
+FX_FC_comp=funcomp((t::Float64) -> sol.prob.h(p,t)::SVector{2, Float64},[-τ,0.0])
+FX_FC_Range=RangeFun{Float64,SVector{2, Float64}}((t) -> sol.prob.h(p,t),[-τ,0.0])
 
 
 # ~~~~~~~~~~~~~~~~~~~~~ RangeFunction ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -163,6 +160,10 @@ bbb= similar(aaa)
  LinearAlgebra.rmul!(bbb,0.1)
  LinearAlgebra.axpy!(10.0,aaa,bbb)
  LinearAlgebra.axpby!(10.0,aaa,0.1,bbb)
+ 5+5
+ bbb(1.1)
+ #scale!!(bbb,0.1)
+ bbb(1.1)
 # ~~~~~~~~~~~~~~~~~~~~~ RangeFunction ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #function Operator_Sol(sol_in)#::T where T
 #    Tmap=sol_in.t[end]
@@ -202,15 +203,23 @@ function Operator_FunX(foo::funcomp,dp::dynamic_problemSampled)
     return fX_sol_out::funcomp,sol_out
 end
 
+function Operator_FunX(foo::RangeFun{Tin,Tout},dp::dynamic_problemSampled) where {Tin,Tout}
+    sol_out = solve(remake(dp.Problem; u0=foo(0.0), tspan=(0.0, dp.Tperiod), h=(p,tin)->foo(tin)); dp.alg...)
+    fX_sol_out = RangeFun{Tin,Tout}((t_find)->DDE_mapping.getvalues(sol_out,t_find+dp.Tperiod),[-dp.maxdelay,0.0])
+    return fX_sol_out::RangeFun{Tin,Tout},sol_out
+end
+
 
 
 fXX(-1.0)
 FX_FC(-1.0)
-@time fXX1=Operator_FunX(fXX,dpMathieu)[1];
-@time fXX1=Operator_FunX(fXX1,dpMathieu)[1];
-@time FX_FC1=Operator_FunX(FX_FC,dpMathieu)[1];
-@time FX_FC1=Operator_FunX(FX_FC1,dpMathieu)[1];
-@benchmark Operator_FunX(FX_FC1,dpMathieu)
+f0=FX_FC_Range
+f0(1.0)
+f0=FX_FC_comp
+@time f1=Operator_FunX(f0,dpMathieu)[1];
+@time f2=Operator_FunX(f1,dpMathieu)[1];
+@time f2=Operator_FunX(f1,dpMathieu)[1];
+#@benchmark Operator_FunX(f2,dpMathieu)
 
 
 
@@ -219,12 +228,13 @@ FX_FC(-1.0)
 Ns=100
 probMathieu_long = DDEProblem(DelayMathieu, h, (0.0, Ns*Tmapping), p; constant_lags=[τ])
 @time sol_long = solve(probMathieu_long; Solver_args...);
-@benchmark sol_long = solve(probMathieu_long; Solver_args...)
+#@benchmark sol_long = solve(probMathieu_long; Solver_args...)
 plot(sol_long)
 
 #long simulation by applying the Operator repeteadly
 t_past=LinRange(-τ,0,200)
 s=FX_FC
+s=FX_FC_Range
 kk=0
 v,soliter=Operator_FunX(s,dpMathieu);
 kk +=1
@@ -255,23 +265,49 @@ plot!()
 
 
 ## -------------- KrylovKit Operator testing -----------------------
+FX_FC_comp
+FX_FC_Range
+eltype(FX_FC_comp)
+similar(FX_FC_comp,Int)
+
+scalartype(FX_FC_comp)
+scalartype(typeof(FX_FC_comp))
+
+scalartype(FX_FC_comp)
+norm(FX_FC_comp)
+dot(FX_FC_comp,FX_FC_comp)
+scalartype(FX_FC_Range)
+norm(FX_FC_Range)
+dot(FX_FC_Range,FX_FC_Range)
 
 
 
-s0=FX_FC
-v0 = Operator_FunX(s0,dpMathieu)[1]
+
+
+
+#scale!!(FX_FC_Range,0.1)
+#scale!!(FX_FC_comp,0.1)
+s0=FX_FC_Range;
+s0=FX_FC_comp;
+v0 = Operator_FunX(s0,dpMathieu)[1];
 #println(norm(s0-v0))
-s_start =   Operator_FunX(v0,dpMathieu)[1]
+s_start =   Operator_FunX(v0,dpMathieu)[1];
  
+s0(1.0)
+#scale!!(s0,0.1);
+schursolve((xx)->Operator_FunX(xx+s0,dpMathieu)[1]-v0, s_start,Krylov_arg...)
+
 @time musOP = getindex(schursolve((xx)->Operator_FunX(xx+s0,dpMathieu)[1]-v0, s_start,Krylov_arg...), [3, 2, 1]);
-@show @benchmark getindex(schursolve((xx)->Operator_FunX(xx+s0,dpMathieu)[1]-v0, s_start,Krylov_arg...), [3, 2, 1])
+#@show @benchmark getindex(schursolve((xx)->Operator_FunX(xx+s0,dpMathieu)[1]-v0, s_start,Krylov_arg...), [3, 2, 1])
 
 
 
 # Plotting the Floquet multipliers
 #in log scale
+plot(log.(abs.(mu[1])))
 plot!(log.(abs.(musOP[1])))
 #in complex plane
+scatter(mu[1])
 scatter!(musOP[1])
 plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
@@ -294,78 +330,3 @@ plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
 
 
- 
-###@time sol1=Operator_Sol(sol);
-###@time sol2=Operator_Sol(sol1);
-###@time sol3=Operator_Sol(sol2);
-### 
-### 
-###@benchmark Operator_Sol(sol)
-###@benchmark Operator_Sol($sol)
-###@benchmark Operator_Sol(sol1)
-###@benchmark Operator_Sol(sol2)
-### 
-###sol1 isa typeof(sol)
-###sol2 isa typeof(sol1)
-###typeof(sol) <: ODESolution
-#####
-###soliter=sol
-###kk=0
-###plot(soliter.t,getindex.(soliter.u,1))
-###@time for _ in 1:50
-###        soliter=Operator_Sol(soliter)
-###  kk += 1
-###plot!(soliter.t .+ kk*soliter.prob.tspan[end],getindex.(soliter.u,1))
-###end
-###plot!()
- 
-##----------------------------
- 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
- 
-#--------------- LinearAlgebra stuff------------
-
-using Revise
-include("sol_operator_functions.jl")
-using LinearAlgebra
-using Integrals
-
-@code_warntype (2.0*sol2)
-@benchmark (2.0*sol2)
-
-@code_warntype  norm(sol)
-
-plot!(similar(sol2))

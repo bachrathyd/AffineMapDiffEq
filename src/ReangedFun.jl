@@ -3,11 +3,12 @@
 using LinearAlgebra
 using BenchmarkTools
 using StaticArrays
-
+using Integrals
 
 using FunctionWrappers
 import FunctionWrappers: FunctionWrapper
 
+#using VectorInterface
 #h(p, t::Float64) = ...
 #h(p, t::Float64, deriv::Type{Val{1}}) = ...
 
@@ -56,9 +57,15 @@ end
 
 #--------------- Functions --------------------
 #keep the range of the first argument! (Mostly it is assumned that the ranges are the same)
-function Base.:+(v::RangeFun{Tin,Tout}, w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin} where {Tout}
+function Base.:+(v::RangeFun{Tin,Tout}, w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin,Tout}
     return RangeFun(FunctionWrapper{Tout,Tuple{Tin}}((t::Tin) -> v(t) + w(t)), v.range)
 end
+function add!!(v::RangeFun{Tin,Tout}, w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin,Tout}
+    return v+w
+end
+#function VectorInterface.add!!(w::RangeFun{Tin,Tout}, v::RangeFun{Tin,Tout}, α::N)::RangeFun{Tin,Tout} where {Tin,Tout,N<:Number}
+#    return LinearAlgebra.axpy!(α, v, w)
+#end
 #keep the range of the first argument! (Mostly it is assumned that the ranges are the same)
 function Base.:-(v::RangeFun{Tin,Tout}, w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin} where {Tout}
     return RangeFun(FunctionWrapper{Tout,Tuple{Tin}}((t::Tin) -> v(t) - w(t)), v.range)
@@ -76,21 +83,39 @@ end
 #foo([1,2], -1.3)
 
 
+function Base.eltype(v::RangeFun{Tin,Tout}) where {Tin,Tout}
+    # #TODO: return an error if v is also empty - maybe it is not a problem
+    return Tout
+end
 #Base.similar(v): a way to construct vectors which are exactly similar to v
-function Base.similar(v::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {N,Tin,Tout}
+function Base.similar(v::RangeFun{Tin,Tout},element_type=eltype(v))::RangeFun{Tin,Tout} where {N,Tin,Tout}
     # #TODO: return an error if v is also empty - maybe it is not a problem
     wout = 0.0 * deepcopy(v) #TODO: do we need to copy it?
     #empty!(v)
 end
 #TODO: this is  bug (or feature): foo([1,2], -1.3)
 
+#function zerovector!(v::RangeFun{Tin,Tout})  where {Tin,Tout}
+#    return empty!(v)
+#end
+function scalartype(v::RangeFun{Tin,Tout}) where {Tin,Tout}
+    return Tout
+end
+
+function scalartype(DT::Type{RangeFun{Tin,Tout}}) where {Tin,Tout}
+    return Tout
+end
+
 function Base.empty!(w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin,Tout}
     w.f = FunctionWrapper{Tout,Tuple{Tin}}((t::Tin) -> zero(Tout))
     w.range .= MVector(zero(Tin), one(Tin))
     return w
 end
-
-
+#function scale!!(v::RangeFun{Tin,Tout}, α::Float64)::RangeFun{Tin,Tout} where {Tin,Tout,N<:Number}
+#   println("-------------ÁÁÁÁÁÁÁÁÁÁÁÁÁÁ-----------")
+#    LinearAlgebra.rmul!(v, α)
+#    return v
+#end
 
 #LinearAlgebra.mul!(w, v, α): out of place scalar multiplication; multiply vector v with scalar α and store the result in w
 function LinearAlgebra.mul!(w::RangeFun{Tin,Tout}, v::RangeFun{Tin,Tout}, α::N)::RangeFun{Tin,Tout} where {Tin,Tout,N<:Number}
@@ -120,8 +145,6 @@ end
 #    LinearAlgebra.axpy!(α, v, funcomp(fw, v.range))
 #end
 
-
-
 #LinearAlgebra.axpby!(α, v, β, w): store in w the result of α*v + β*w
 function LinearAlgebra.axpby!(α::N, v::RangeFun{Tin,Tout}, β::N, w::RangeFun{Tin,Tout})::RangeFun{Tin,Tout} where {Tin,Tout,N<:Number}
     w_foo=deepcopy(w.f)
@@ -131,23 +154,24 @@ end
 
 
 
-#####TODO: ehhez kell a struktúrába valami range (validity range-et definiálni)
-####using Integrals
-#####LinearAlgebra.dot(v,w): compute the inner product of two vectors
-####function LinearAlgebra.dot(v::RangeFun{Tin,Tout},  w::RangeFun{Tin,Tout})::Tnorm where Tnorm
-####    #TODO: nem az egészet kell összeintegrálni, 
-####    #TODO: nem jók az idők, mert a függvény az csak a hsitory function. Csak a mappingben kell a sol és abból kivenni a cuccot...
-####
-####    tstart = maximum([v.range[1], w.range[1]])
-####    tend = minimum([v.range[2], w.range[2]])
-####
-####    prob = IntegralProblem((t, p) -> v(t)' * w(t), tstart, tend)
-####    VW = solve(prob, HCubatureJL(), reltol=1e-5, abstol=1e-5).u# 
-####    #println(VW)
-####    return VW::Tnorm
-####end
-####
-#####LinearAlgebra.norm(v): compute the 2-norm of a vector
-####function LinearAlgebra.norm(v::funcomp)::Float64
-####    return sqrt(dot(v, v))::Float64
-####end
+#TODO: ehhez kell a struktúrába valami range (validity range-et definiálni)
+
+#LinearAlgebra.dot(v,w): compute the inner product of two vectors
+function LinearAlgebra.dot(v::RangeFun{Tin,Tout},  w::RangeFun{Tin,Tout}) where {Tin,Tout}
+    #TODO: nem az egészet kell összeintegrálni, 
+    #TODO: nem jók az idők, mert a függvény az csak a hsitory function. Csak a mappingben kell a sol és abból kivenni a cuccot...
+
+    tstart = maximum([v.range[1], w.range[1]])
+    tend = minimum([v.range[2], w.range[2]])
+
+    #prob = IntegralProblem((t, p) -> v(t)' * w(t), tstart, tend)
+    prob = IntegralProblem((t, p) -> dot(v(t), w(t)), tstart, tend)
+    VW = solve(prob, HCubatureJL(), reltol=1e-5, abstol=1e-5).u# 
+    #println(VW)
+    return VW#::Tnorm
+end
+
+#LinearAlgebra.norm(v): compute the 2-norm of a vector
+function LinearAlgebra.norm(v::RangeFun{Tin,Tout}) where {Tin,Tout}
+    return sqrt(dot(v, v))
+end
