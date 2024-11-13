@@ -17,9 +17,10 @@ using Profile
 using StaticArrays
 using DifferentialEquations
 
+using KrylovKit
 # using Memoization
 
-#using MDBM
+using MDBM
 
 
 using Integrals
@@ -121,28 +122,33 @@ h0=0.1e-3
 
 κ=20#kg
 κnl=-0.01
-τN=100e-3
+τN=30e-3#100e-3
 τ1 =10e-3
 ∆T = τN −τ1
+
 #η(θ)::Float64=κ/∆T#TODO: wring parametrization of the input
 #ηnl(θ)::Float64=κnl/∆T#TODO: wring parametrization of the input
-η(θ)::Float64=κ/∆T*exp((θ+τ1))
-ηnl(θ)::Float64=κnl/∆T*exp((θ+τ1))#TODO: wring parametrization of the input
+
+Apow=2.0
+#η(θ)::Float64=κ/∆T*Apow*exp(Apow*(θ+τ1))
+#ηnl(θ)::Float64=κnl/∆T*Apow*exp(Apow*(θ+τ1))#TODO: wring parametrization of the input
+η(θ)::Float64=κ/∆T*2.0*exp(2.0*(θ+τ1))
+ηnl(θ)::Float64=κnl/∆T*2.0*exp(2.0*(θ+τ1))#TODO: wring parametrization of the input
   
 μ=0;#knl/m
 
-w=1e-3
-Ωrpm=7000#8000 rpm
+w=2e-3
+Ωrpm=8000#8000 rpm
   
 
 pars= (w,Ωrpm, ωₙ, ζ, μ, k,ρ1,ρ2,ρ3,η,ηnl , τN, τ1,σ1,σ2,σ3,σ4,σ5)
 
-Int_reltol=1e-4
+Int_reltol=1e-2
 Int_abstol=1e1
 
 h(p, t::Float64) = SA[1.0e-5, 0.0]
-h(p, t::Float64, deriv::Type{Val{1}}) = SA[0.0, 1.0e-5]
-u0 = SA[-1.0e-5, 0.0]
+h(p, t::Float64, deriv::Type{Val{1}}) = SA[0.0, 0]
+u0 = SA[1.0e-6, 0.0]
 
 @time diff_cutting_acc_control_neutral_perturbed(u0, h, pars, 0.1);
 # @code_warntype diff_cutting_acc_control_neutral_perturbed(u0, h, pars, 0.1)
@@ -250,16 +256,16 @@ plot!(dpdp.StateSmaplingTime.+ dpdp.Tperiod,getindex.(v0,2),title="Schur mode 1"
 
 println("----------Start brute-force---------------")
 
-Neig=2#number of required eigen values
-Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-4,krylovdim=Neig+8,verbosity=0));
+Neig=4#number of required eigen values
+Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-4,krylovdim=Neig+20,verbosity=0));
 
-N=100 #12 min
-N=60;#2 min
+N=200 #12 min
+N=40;#30-2 min
 Ωrpmv = LinRange(2000,9000,N+1)# initial grid in x direction
 wv = LinRange(-0.1e-3,10e-3,N)# initial grid in y direction
 Spek = zeros(size(wv, 1), size(Ωrpmv, 1))
 #Threads.@threads
-
+τN=30e-3
 @time Threads.@threads  for j in 1:size(Ωrpmv, 1)
     println(j)
     Ωrpm = Ωrpmv[j]
@@ -286,8 +292,67 @@ end
 
 Spek_sat = deepcopy(Spek);
 Spek_sat[Spek_sat.>1.0] .= 1.0;
-heatmap(Ωrpmv,wv, (Spek_sat),xlabel="w", ylabel="Ωrpm")
+StabMap_base=heatmap(Ωrpmv,wv, (Spek_sat),xlabel="w", ylabel="Ωrpm")
 
+
+## ---------------------- BA-D-curve solution --------------------
+
+Nstart=8
+ax1 = Axis(LinRange(2000.0,9000.0,Nstart), "Ωrpm") # initial grid in y direction
+ax2 = Axis(LinRange(-0.1e-3,8e-3,Nstart), "w") # initial grid in x direction
+ax3 = Axis(LinRange(-10.0,1500.0,Nstart), "ωc") # initial grid in y direction
+function foo_BA_Dcurve(Ωrpm_loc::Float64, w_loc::Float64,ω_loc::Float64)::SVector{2, Float64}
+
+
+    ωₙ=150*2*pi
+    ζ=0.01
+    k=20e6
+    h0=0.1e-3
+    ρ1 = 6109.6*1e6;#6109.6 N/mm2
+    ρ2 = −54141.6*1e9;# −54141.6 N/mm3
+    ρ3 =203769 *1e12;# 203769 N/mm4
+    σ1 = ρ1 +2*h0 *ρ2 +3* h0^2*ρ3
+  
+    
+    κ=20#kg
+    τN=30-3
+    τ1 =10e-3
+    ∆T = τN −τ1
+    #η(θ::Float64)::Float64=κ/∆T#TODO: wring parametrization of the input
+    η(θ)::Float64=κ/∆T*2.0*exp(2.0*(θ+τ1))
+
+
+    τc=60/Ωrpm_loc;
+    λ=1.0im*ω_loc
+
+    θv=LinRange(- τN, - τ1,500)[2:end-1]
+    dθ=θv[2]-θv[1]
+    ker_lin(θ::Float64)::ComplexF64 =λ^2*exp(λ*θ)*η(θ)
+   # INTsol=(0.5*ker_lin(θv[1])+sum(ker_lin.(θv))+0.5*ker_lin(θv[end]))*dθ;
+    INTsol=(0.5*ker_lin(θv[1])+reduce(+,ker_lin.(θv))+0.5*ker_lin(θv[end]))*dθ;
+
+  # # ###at_τ_foo(t, p) = h(p, t, Val{1})[2]# derivative of the delayed velocity --> delayed acceleration
+  # ker_lin(θ::Float64, _)::ComplexF64 =λ^2*exp(λ*θ)*η(θ)
+  # prob_lin = IntegralProblem(ker_lin,  (- τN, - τ1),())
+  # solInt_lin = solve(prob_lin, HCubatureJL(); reltol=1e-1)
+  # INTsol::ComplexF64=solInt_lin.u
+
+    D=λ^2+2*ζ*ωₙ*λ+  ωₙ^2-ωₙ^2/k*INTsol+ωₙ^2/k*w_loc*σ1*(1-exp(-λ*τc))
+    return SA[real(D), imag(D)]::SVector{2, Float64}
+end
+@time foo_BA_Dcurve(1000.0,5e-3,300.0)
+#@benchmark foo_BA_Dcurve(1000.0,5e-3,300.0)
+#@code_warntype foo_BA_Dcurve(1000.0,5e-3,300.0)
+Dcurve_mdbm = MDBM_Problem(foo_BA_Dcurve, [ax1, ax2, ax3])
+iteration = 1#number of refinements (resolution doubling)
+#for _ in 1:2
+@time MDBM.solve!(Dcurve_mdbm, iteration);
+Dcurve_x_sol, Dcurve_y_sol, Dcurve_z_sol = getinterpolatedsolution(Dcurve_mdbm);
+plot(StabMap_base)
+scatter!(Dcurve_x_sol, Dcurve_y_sol, markersize=2)
+
+#scatter(Dcurve_x_sol, Dcurve_z_sol, zcolor=Dcurve_z_sol, markersize=2)
+#end
 
 
 
@@ -298,8 +363,8 @@ println("----------Start brute-force---------------")
 Neig=2#number of required eigen values
 Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-4,krylovdim=Neig+8,verbosity=0));
 
-N=10;#2 min
-τNv = LinRange(0.01e-3,200e-3,N+1)# initial grid in x direction
+N=30;#2 min
+τNv = LinRange(11e-3,200e-3,N+1)# initial grid in x direction
 wv = LinRange(-0.1e-3,10e-3,N)# initial grid in y direction
 Spek = zeros(size(wv, 1), size(τNv, 1))
 #Threads.@threads
@@ -331,7 +396,7 @@ end
 
 Spek_sat = deepcopy(Spek);
 Spek_sat[Spek_sat.>1.0] .= 1.0;
-heatmap(τNv,wv, (Spek_sat),xlabel="w", ylabel="τN")
+heatmap(τNv,wv, (Spek_sat),xlabel="τN", ylabel="w")
 
 
 
@@ -372,57 +437,3 @@ heatmap(τNv,wv, (Spek_sat),xlabel="w", ylabel="τN")
 ##scatter!(x_sol,y_sol,markersize=3)
 #scatter!(x_sol, y_sol, color=:blue, markersize=3)
 #
-
-#---------------------- BA-D-curve solution --------------------
-using MDBM
-using Plots
-
-
-Nstart=8
-ax1 = Axis(LinRange(3000.0,9000.0,Nstart), "Ωrpm") # initial grid in y direction
-ax2 = Axis(LinRange(-1e-3,8-3,Nstart), "w") # initial grid in x direction
-ax3 = Axis(LinRange(-10.0,1500.0,Nstart), "ωc") # initial grid in y direction
-function foo_BA_Dcurve(Ωrpm_loc::Float64, w_loc::Float64,ω_loc::Float64)::SVector{2, Float64}
-
-
-    ωₙ=150*2*pi
-    ζ=0.01
-    k=20e6
-    h0=0.1e-3
-    ρ1 = 6109.6*1e6;#6109.6 N/mm2
-    ρ2 = −54141.6*1e9;# −54141.6 N/mm3
-    ρ3 =203769 *1e12;# 203769 N/mm4
-    σ1 = ρ1 +2*h0 *ρ2 +3* h0^2*ρ3
-  
-    
-    κ=20#kg
-    τN=10e-3
-    τ1 =20e-3
-    ∆T = τN −τ1
-    η(θ::Float64)::Float64=κ/∆T#TODO: wring parametrization of the input
-      
-
-    τc=60/Ωrpm_loc;
-    λ=1.0im*ω_loc
-
-    #at_τ_foo(t, p) = h(p, t, Val{1})[2]# derivative of the delayed velocity --> delayed acceleration
-    ker_lin(θ::Float64, _)::ComplexF64 =λ^2*exp(λ*θ)*η(θ)
-    prob_lin = IntegralProblem(ker_lin,  (- τN, - τ1),[])
-    solInt_lin = solve(prob_lin, HCubatureJL(); reltol=1e-4)
-    INTsol::ComplexF64=solInt_lin.u
-
-    D=λ^2+2*ζ*ωₙ*λ+  ωₙ^2-ωₙ^2/k*INTsol+ωₙ^2/k*w_loc*σ1*(1-exp(-λ*τc))
-    return SA[real(D), imag(D)]::SVector{2, Float64}
-end
-@time foo_BA_Dcurve(1000.0,5e-3,300.0)
-#@benchmark foo_BA_Dcurve(1000.0,5e-3,300.0)
-#@code_warntype foo_BA_Dcurve(1000.0,5e-3,300.0)
-Dcurve_mdbm = MDBM_Problem(foo_BA_Dcurve, [ax1, ax2, ax3])
-iteration = 1#number of refinements (resolution doubling)
-
-#for _ in 1:2
-@time MDBM.solve!(Dcurve_mdbm, iteration);
-Dcurve_x_sol, Dcurve_y_sol, Dcurve_z_sol = getinterpolatedsolution(Dcurve_mdbm);
-@show scatter(Dcurve_x_sol, Dcurve_y_sol, zcolor=Dcurve_z_sol, markersize=2)
-@show scatter(Dcurve_x_sol, Dcurve_z_sol, zcolor=Dcurve_z_sol, markersize=2)
-#end
