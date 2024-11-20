@@ -71,6 +71,7 @@ function partialpart(xSA)#::SVector)
     #return MVector(bb...);
 end
 
+
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)[1]
@@ -78,15 +79,16 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
     Nstep = size(dp.StateSmaplingTime, 1)
     s_start = rand(typeof(dp.Problem.u0), Nstep)
 
-    #TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
   
-    one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
     #if true#~DODOAU
-    #    println("Float perturbation")
-    #    s_start .*=  EPSI_TODO_REMOVE
+    # println("Float perturbation")
+    # EPSI_TODO_REMOVE=1e-3
+    # s_start .*=  EPSI_TODO_REMOVE
+    # TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
     #else
-        #println("Dual perturbation - it seems to be faster! ;-)")
-        TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
+         println("Dual perturbation - it seems to be faster! ;-)")
+         one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0) 
+         TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
     #end
 
     # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
@@ -141,8 +143,11 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
     s0 = [0.0* dp.Problem.u0 for _ in 1: Nstep]
     #s0 = rand(typeof(dp.Problem.u0), Nstep)
     ##affine(dp, s0; p=p)
-    ## println(s0)
-    ## println(typeof(s0))
+    #println("----------------------")
+    #@show s0
+    #@show typeof(s0)
+    #println("------<<<<<<<<<<<<<<<<<<<--------")
+    
     muSFix = affine(dp, s0; p=p)#First iteration
     for _ in 2:dp.affineinteration #secondary interation
         muSFix = affine(dp, muSFix[2]; p=p)
@@ -162,7 +167,6 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     StateSmaplingTime = dp.StateSmaplingTime
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
 
-
     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
     itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
     #itp = interpolate(s, BSpline(Linear()))
@@ -174,7 +178,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
 
 
-    NewTimePoints = StateSmaplingTime .+ dp.Tperiod
+    #NewTimePoints = StateSmaplingTime .+ dp.Tperiod
     #####TODO: ez miért lassabb
     ##saveNewPostions=NewTimePoints[NewTimePoints .>= 0.0]
     ##savePastPostions=NewTimePoints[NewTimePoints .< 0.0]
@@ -190,7 +194,15 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
+    
+    println("zzzzzzzzzzzzzzzzzzzzz")
+    @show typeof(dp.Tperiod)
+    @show dp.Tperiod
+    @show hint(p, 0.0)
+    @show typeof(hint(p, 0.0))
     sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+    #@show sol.t[end]
+    
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.Problem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
@@ -204,6 +216,8 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts - ez lassabbnak tűnik!
+    
+    NewTimePoints = StateSmaplingTime .+ sol.t[end]
     v = [getvalues(sol, ti) for ti in NewTimePoints]
     #vv = reduce(vcat, v)
     #return vv::Vector{Float64}
