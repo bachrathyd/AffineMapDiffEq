@@ -24,6 +24,7 @@ function DelayedNonlineOscill(u, h, p, t)
     # Components of the delayed differential equation
     dx = u[2]
     ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^3
+    #ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^2*sign(u[2])
     # Update the derivative vector
     SA[dx, ddx]
 end
@@ -31,10 +32,10 @@ end
 Base.:+(a::SVector, b::Bool) = a .+ b
 Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
 ζ = 0.01         # damping coefficient
-δ = 1.#0.2          # nat. freq
-b = -0.06#0.3
-τ = 0.5#2pi          # Time delay
-μ = 5
+δ = 3.1#0.2          # nat. freq
+b = -2.8#-0.06#0.3
+τ = 0.5#2pi#0.5#2pi          # Time delay
+μ = 5.0
 p = ζ, δ, b, τ, μ
 #p = (ζ, ωn, k, τ,10.0)
 
@@ -44,15 +45,17 @@ u0 = SA[0.001, 0.0]
 #history function
 h(p, t) = SA[0.0; 0.0]
 
-Tlongsim = 2000.2
-Tend = 7.0
-prob_long = DDEProblem(DelayedNonlineOscill, u0, h, (0.0, Tlongsim), p; constant_lags=[τ])
-
+Tlongsim = 5000.2
+Tend = 27.0
+prob_long = DDEProblem{false}(DelayedNonlineOscill, u0, h, (0.0, Tlongsim), p; constant_lags=[τ])
+#SciMLBase.AutoSpecialize
+#SciMLBase.NoSpecialize
+#SciMLBase.FullSpecialize
 
 #Parameters for the solver as a Dict (it is necessary to collect it for later use)
 Solver_args = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-7)#
 
-sol = solve(remake(prob_long, p=(ζ, δ, b, τ, μ)); Solver_args...)#abstol,reltol
+@time sol = solve(remake(prob_long, p=(ζ, δ, b, τ, μ)); Solver_args...);
 plot(sol)
 ##
 #last period of the long simulation:
@@ -72,25 +75,25 @@ plot!(sol_period[1, :], sol_period[2, :])
 
 
 ## ---------------- simulation max amplitude ----------------------
-## parameters 
-norm_solperiod = zeros(Float64, 0)
-plot()
-bv = LinRange(-0.1, 0.05, 50)
-@time for bloc in bv
-    println(bloc)
+## parameters
+
+bv = LinRange(-2.0, 0.2, 110)
+norm_solperiod = similar(bv)
+@time Threads.@threads for ib in eachindex(bv)
+    println(ib)
+    bloc = bv[ib]
     #prob_long = DDEProblem(DelayedNonlineOscill, u0, h, (0.0, Tlongsim), (ζ, δ, bloc, τ, μ); constant_lags=[τ])
     #sol = solve(prob_long; Solver_args...)#abstol,reltol
 
     sol = solve(remake(prob_long, p=(ζ, δ, bloc, τ, μ)); Solver_args...)#abstol,reltol
 
-    plot(sol)
+    #plot(sol)
     #last period of the long simulation:
     t_select_period = 0.0:0.01:Tend
     t_select_delay = eriod = 0.0:0.01:τ
     sol_period = sol(sol.t[end] .- t_select_period)
     sol_delay = sol(sol.t[end] .- t_select_delay)
-    #push!(norm_solperiod, norm(sol_period.u))
-    push!(norm_solperiod, maximum(getindex.(sol_period.u,1)))
+    norm_solperiod[ib] = maximum(abs.(getindex.(sol_period.u, 1)))
 end
 
 plot(bv, norm_solperiod)
@@ -115,41 +118,140 @@ dp_0_Tfix = dynamic_problemSampled(prob_long, Solver_args, τmax,
     zerofixpont=true, affineinteration=0,
     Krylov_arg=Krylov_arg)
 
-μ₀ = []
-bv_affine = LinRange(-0.1, 0.05, 250)
-@time for bloc in bv_affine
+bv_affine = LinRange(-2.0, 0.2, 201)
+λ_μ₀ = Any[similar(bv_affine)...]
+@time Threads.@threads for ib in eachindex(bv_affine)
+    println(ib)
+    bloc = bv_affine[ib]
     mu, saff, sol0 = affine(dp_0_Tfix; p=(ζ, δ, bloc, τ, μ))
-    push!(μ₀, mu[1])
+    λ_μ₀[ib] = log.(abs.(mu[1])) / sol0.t[end]
+
 end
 
 plot(bv, norm_solperiod)
 #scatter()
-for k in 1:Neig
-    plot!(bv_affine, (abs.(getindex.(μ₀, k)) .- 1) .* 10)
+for k in 1#:Neig
+    plot!(bv_affine, getindex.(λ_μ₀, k))
 end
 plot!()
 
 
-## ---------------------- Hopf solution -------------------
-b = -0.06
 
 
+##----------------------- DDE-Hopf amp stab -------------------
 
+
+function condition(u, t, integrator) # Event when condition(u,t,integrator) == 0
+    u[2]
+end
+function affect_short!(integrator)
+    if integrator.t > 0.1
+        terminate!(integrator)
+    end
+end
+cb_short = ContinuousCallback(condition, affect_short!,nothing)
+
+Solver_args_T_short = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-6,
+    :callback => cb_short)#
+
+Nstep = 50
 
 using ForwardDiff
-u01_Dual = ForwardDiff.Dual{Float64}(0.05, 2.0) 
+#TODO: ez nem hiszem, hogy jó megoldás
+Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64,Float64,1}) = x.value
+
+using KrylovKit
+Neig = 6#number of required eigen values
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-30, krylovdim=3 + 35, verbosity=0));
+#Creating the problem
+Timeperiod = 20.0;#Tend
+
+dp_Hopf_callback = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
+    Timeperiod; Historyresolution=Nstep,
+    zerofixpont=false, affineinteration=2,
+    Krylov_arg=Krylov_arg)
+
+
+
+ustart = rand(typeof(dp_Hopf_callback.Problem.u0), Nstep)
+ustart = ustart .* 0.0 .+ 0.51
+bv_affine_H = LinRange(-2.0, 0.2, 90)
+λ_μ₀_Hopf = Any[similar(bv_affine_H)...]
+Amp_H = Any[similar(bv_affine_H)...]
+#
+plot()
+@time   for ib in eachindex(bv_affine_H)
+    println(ib)
+    bloc = bv_affine_H[ib]
+    mu, saff, sol0 = affine(dp_Hopf_callback, ustart; p=(ζ, δ, bloc, τ, μ))
+    #mu, saff, sol0 = affine(dp_Hopf_callback; p=(ζ, δ, bloc, τ, μ))
+    λ_μ₀_Hopf[ib] = log.(abs.(mu[1])) / sol0.t[end]
+    #Amp[ib] = saff
+
+    #ustart=saff #TODO: enélkül nem áll be szépen
+    Amp_H[ib] = maximum(abs.(getindex.(saff, 1)))
+    plot!(sol0[1, :], sol0[2, :])
+    plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=1, lab="")#
+end
+plot!(legend=false)
+
+
+plot(bv, norm_solperiod)
+scatter!(bv_affine_H, Amp_H)
+plot!(legend=false)
+##
+
+#scatter()
+for k in 1:3
+    plot!(bv_affine_H, getindex.(λ_μ₀_Hopf, k))
+end
+plot!()
+#plot!(ylim=(-1,30))
+
+
+
+
+
+
+
+
+#TODO: csak itt tartok
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## ---------------------- Hopf solution -------------------
+b = -0.9
+
+
+Tlongsim = 500.2
+using ForwardDiff
+u01_Dual = ForwardDiff.Dual{Float64}(0.05, 2.0)
 u01_Dual.partials
 u01_Dual.value
 
 #initial condition
-u0 = SA[0.05, 0.0]
-u0 = SA[ ForwardDiff.Dual{Float64}(0.05, 2.0) ,  ForwardDiff.Dual{Float64}(0.05, 2.0) ]
+u0 = SA[0.05, 0.1]
 #history function
 h(p, t) = SA[0.5; 0.0]
-h(p, t) = SA[ ForwardDiff.Dual{Float64}(0.05, 2.0) ,  ForwardDiff.Dual{Float64}(0.05, 2.0) ]
+prob = DDEProblem(DelayedNonlineOscill, u0, h, (0, Tlongsim), p; constant_lags=[τ])
 
-TlongsimDUA=ForwardDiff.Dual{Float64}(Tlongsim, 0.0) 
-prob_DUAL = DDEProblem(DelayedNonlineOscill, u0, h, (ForwardDiff.Dual{Float64}(0.0, 0.0) , TlongsimDUA), p; constant_lags=[τ])
+u0_DUAL = SA[ForwardDiff.Dual{Float64}(0.05, 2.0), ForwardDiff.Dual{Float64}(0.05, 2.0)]
+h_dual(p, t) = SA[ForwardDiff.Dual{Float64}(0.05, 2.0), ForwardDiff.Dual{Float64}(0.05, 2.0)]
+Tlongsim_DUAL = ForwardDiff.Dual{Float64}(Tlongsim, 0.0)
+prob_DUAL = DDEProblem(DelayedNonlineOscill, u0_DUAL, h_dual, (ForwardDiff.Dual{Float64}(0.0, 0.0), Tlongsim_DUAL), p; constant_lags=[τ])
 
 
 function condition(u, t, integrator) # Event when condition(u,t,integrator) == 0
@@ -157,7 +259,7 @@ function condition(u, t, integrator) # Event when condition(u,t,integrator) == 0
 end
 function affect_long!(integrator)
     #println(typeof(integrator))
-    if integrator.t > 200.0#1500.0
+    if integrator.t > 100.0#1500.0
         terminate!(integrator)
     end
 end
@@ -175,9 +277,10 @@ Solver_args_T_long = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :relt
 Solver_args_T_short = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-6,
     :callback => cb_short)#
 
-Nstep = 500
-sol = solve(remake(prob_DUAL, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
-sol = solve(remake(prob_long, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
+Nstep = 50
+#sol = solve(remake(prob_DUAL, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
+#plot(sol)
+sol = solve(remake(prob, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
 plot(sol)
 
 
@@ -190,32 +293,58 @@ sol_delay = sol(sol.t[end] .+ t_select_delay)
 
 plot(t_select_period, sol_period[1, :])
 plot!(t_select_period, sol_period[2, :])
-plot!(t_select_delay, sol_delay[1, :],lw=3)
-plot!(t_select_delay, sol_delay[2, :],lw=3)
+plot!(t_select_delay, sol_delay[1, :], lw=3)
+plot!(t_select_delay, sol_delay[2, :], lw=3)
 
 
-plot(sol[1, :],sol[2, :])
-plot!(sol_period[1, :],sol_period[2, :],lw=4)
-plot!(sol_delay[1, :],sol_delay[2, :],lw=4)
+plot(sol[1, :], sol[2, :])
+plot!(sol_period[1, :], sol_period[2, :], lw=4)
+plot!(sol_delay[1, :], sol_delay[2, :], lw=4)
 
 
+
+
+#TODO: ez nem hiszem, hogy jó megoldás
+Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64,Float64,1}) = x.value
+
+using KrylovKit
+Neig = 4#number of required eigen values
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-20, krylovdim=3 + 20, verbosity=0));
 #Creating the problem
 Timeperiod = 20.0;#Tend
-dp_Hopf_callback = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
+
+dp_Hopf_callback = dynamic_problemSampled(prob, Solver_args_T_short, τmax,
     Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false, affineinteration=2,
+    zerofixpont=false, affineinteration=4,
     Krylov_arg=Krylov_arg)
 #@time mu, saff, sol0 = affine(dp_Hopf_callback, sol_delay.u; p=(ζ, δ, b, τ, μ))
+ustart = similar(sol_delay.u) .* 0.0 .+ 0.01
+ustart = sol_delay.u .+ 0.0001
+#ustart=sol_delay.u
+@time mu, saff, sol0 = affine(dp_Hopf_callback, ustart; p=(ζ, δ, b, τ, μ));
+@time mu, saff, sol0 = affine(dp_Hopf_callback; p=(ζ, δ, b, τ, μ));
 
-@time mu, saff, sol0 = affine(dp_Hopf_callback, sol_delay.u; p=(ζ, δ, b, τ, μ))
-
-plot(sol0)
 plot()
-# Comparing the solutions:
-plot(sol_period[1, :], sol_period[2, :], marker=:circle, markersize=6, lab="")
-plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=4, lab="")#
-plot!(sol0[1, :], sol0[2, :], marker=:circle, lw=0, lab="")#marker=:cross,markersize=2)#
-##
+plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=3, lab="")#
+plot!(sol0[1, :], sol0[2, :])
+plot!(legend=false)
+vaff, sol_s = LinMap(dp_Hopf_callback, saff, p=(ζ, δ, b, τ, μ))
+norm(saff - vaff)
+
+ustart = similar(sol_delay.u) .* 0.0 .+ 0.01
+
+s0 = saff
+s0 = similar(sol_delay.u) .* 0.0 .+ 0.03
+for _ in 1:4
+    plot!(getindex.(s0, 1), getindex.(s0, 2), marker=:circle, markersize=4, lab="")#
+    v0, sol_s = LinMap(dp_Hopf_callback, s0, p=(ζ, δ, b, τ, μ))
+    plot!(sol_s[1, :], sol_s[2, :])
+    s0 = v0
+    plot!(getindex.(v0, 1), getindex.(v0, 2), marker=:circle, markersize=4, lab="")#
+end
+plot!(legend=false)
+
+
 
 
 # Plotting the Floquet multipliers
@@ -226,105 +355,9 @@ scatter(mu[1])
 plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
 
 
-using ForwardDiff
-a = ForwardDiff.Dual{Float64}(00.0, 2.0) 
-a.partials
-a.value
-
-a==-0.0
-
-
-#TODO: ez nem hiszem, hogy jó megoldás
-Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64, Float64, 1}) = x.value
 
 
 
-
-
-
-
-
-
-
-dp=dp_Hopf_callback
-s0 = sol_delay.u
-s0=a0
-plot()
-plot!(dp.StateSmaplingTime, getindex.(s0, 1),lw=1)
-plot!(dp.StateSmaplingTime, getindex.(s0, 2),lw=1)
-
-v0, sol_loc = DDE_mapping.LinMap(dp, s0; p=(ζ, δ, b, τ, μ));
-plot!(sol_loc.t,sol_loc[1,:])
-plot!(sol_loc.t,sol_loc[2,:])
-Ti = sol_loc.t[end]
-#plot!(xlim=(-τ, Ti))
-
-plot!(dp.StateSmaplingTime.+Ti, getindex.(v0, 1),lw=2)
-plot!(dp.StateSmaplingTime.+Ti, getindex.(v0, 2),lw=2)
-plot!(dp.StateSmaplingTime, getindex.(v0, 1),lw=2)
-plot!(dp.StateSmaplingTime, getindex.(v0, 2),lw=2)
-@show norm(s0-v0)
-s0=v0
-plot!(legend=false)
-
-
-
-#println(norm(s0-v0))
-Nstep = size(dp.StateSmaplingTime, 1)
-s_start = rand(typeof(dp.Problem.u0), Nstep)
-
-
-
-dp=dp_Hopf_callback
-s0 = sol_delay.u
-s0=a0
-v0 = LinMap(dp, s0; p=p)[1]
-
-#println("Float perturbation")
-#EPSI_TODO_REMOVE = 1e-6;
-#s_start .*= EPSI_TODO_REMOVE
-#TheMapping(s) = (LinMap(dp, s + s0; p=p)[1] - v0)
-
-println("Dual perturbation - it seems to be faster! ;-)")
-one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0) 
-TheMapping(s) = DDE_mapping.partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)
-
-vstart=TheMapping(s_start)
-
-
-#dp=dp_Hopf_callback
-#s0 = s_start
-plot()
-plot!(dp.StateSmaplingTime, getindex.(s0, 1),lw=1)
-plot!(dp.StateSmaplingTime, getindex.(s0, 2),lw=1)
-
-v0 = TheMapping(s0)
-
-plot!(dp.StateSmaplingTime.+Ti, getindex.(v0, 1),lw=4)
-plot!(dp.StateSmaplingTime.+Ti, getindex.(v0, 2),lw=4)
-plot!(dp.StateSmaplingTime, getindex.(v0, 1),lw=5)
-plot!(dp.StateSmaplingTime, getindex.(v0, 2),lw=5)
-@show norm(s0-v0)
-s0=v0
-plot!(legend=false)
-
-##
-
-mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
-
-
-
-plot(log.(abs.(mus[1])))
-#in complex plane
-scatter(mus[1])
-plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
-
-a0 = real.(DDE_mapping.find_fix_pont(s0, v0, mus[1], mus[2]))
-
-plot(sol_delay.t .- sol.t[end], getindex.(a0, 1))
-plot!(sol_delay.t .- sol.t[end], getindex.(a0, 2))
-
-s0=a0
 
 
 
@@ -515,5 +548,3 @@ x_sol, y_sol = getinterpolatedsolution(mymdbm)
 #scatter(x_eval,y_eval,markersize=1)
 #scatter!(x_sol,y_sol,markersize=2)
 scatter!(x_sol, y_sol, markersize=1)
-
-

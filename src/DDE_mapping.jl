@@ -12,7 +12,8 @@ using ForwardDiff
 
 
 export dynamic_problemSampled,affine,spectralradius,
-spectrum,LinMap
+spectrum,LinMap,
+partialpart
 
 include("DDE_mapping_types.jl")
 include("DDE_mapping_functions.jl")

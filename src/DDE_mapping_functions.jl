@@ -1,5 +1,5 @@
-function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200, 
-    zerofixpont=true, affineinteration=1,Krylov_arg=())
+function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200,
+    zerofixpont=true, affineinteration=1, Krylov_arg=())
     #dt=maxdelay / Historyresolution
 
     StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO: Float64!!!
@@ -8,8 +8,8 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
-    dynamic_problemSampled(prob, alg, maxdelay, Tperiod,zerofixpont, affineinteration,
-    StateSmaplingTime,Krylov_arg)
+    dynamic_problemSampled(prob, alg, maxdelay, Tperiod, zerofixpont, affineinteration,
+        StateSmaplingTime, Krylov_arg)
 end
 #function remake(dp::dynamic_problemSampled, kwargs...)
 #    DifferentialEquations.remake(dp.Problem, kwargs...)
@@ -38,7 +38,7 @@ function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
 
     #randsimilar!(s_start)
     #EIGEN BASED
-     # mus = eigsolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM)
+    # mus = eigsolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM)
     # # vals, vecs, info = eigsolve(...) 
 
     #ISSI BASED
@@ -47,7 +47,7 @@ function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
     #SCHUR BASED
     #mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
 
-#    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=3)), [3, 2, 1])
+    #    mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=3)), [3, 2, 1])
     mus = getindex(schursolve(s -> LinMap(dp, s; p=p)[1], s_start, dp.Krylov_arg...), [3, 2, 1])
     # T, vecs, vals, info = schursolve(...) with
 
@@ -72,96 +72,118 @@ function partialpart(xSA)#::SVector)
 end
 
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where T
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p) where {T}
     #TODO: fixed dimension problem!!!!
     v0 = LinMap(dp, s0; p=p)[1]
-    #println(norm(s0-v0))
-    Nstep = size(dp.StateSmaplingTime, 1)
-    s_start = rand(typeof(dp.Problem.u0), Nstep)
 
-  
-    #if true#~DODOAU
-    # println("Float perturbation")
-    # EPSI_TODO_REMOVE=1e-3
-    # s_start .*=  EPSI_TODO_REMOVE
-    # TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
-    #else
-         println("Dual perturbation - it seems to be faster! ;-)")
-         one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0) 
-         TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
-    #end
 
-    # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
-    ## #println(norm(s0-v0))
-    ## mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
-    ## ###mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
 
-    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
+    Finished_itertaion = 0
+    do_more_iteration = true
+    while do_more_iteration
 
-    #TODO: in case of very high tolerance it will use all the krylovdim!!!
-    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
-    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
-    mus = getindex(schursolve(TheMapping, s_start,dp.Krylov_arg...), [3, 2, 1])
-    
-    #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
-    #TODO: schursolve
-    #println(size(mus[1],1))
-    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
 
-    #println("Fix point calculation ---------- Start")
-    #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
-    #TODO: it might be better to incluse the mus calcluations here too
-    for k_fix_iteration in 1:50  #TODO:use input parameters for this with default value
-       # println("find_fix_pont_start")
-        s0=a0;
-        v0=LinMap(dp, s0; p=p)[1];
+        #println(norm(s0-v0))
+        Nstep = size(dp.StateSmaplingTime, 1)
+        s_start = rand(typeof(dp.Problem.u0), Nstep)
+
+
+        #if true#~DODOAU
+        # println("Float perturbation")
+        # EPSI_TODO_REMOVE=1e-3
+        # s_start .*=  EPSI_TODO_REMOVE
+        # TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
+        #else
+        #println("Dual perturbation - it seems to be faster! ;-)")
+        one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+        TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
+        #end
+
+
+
+        # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
+
+        ## #println(norm(s0-v0))
+        ## mus = eigsolve(TheMapping, s_start, dp.eigN, :LM)
+        ## ###mus = eigsolve(TheMapping, size(s0, 1), dp.eigN, :LM)#, krylovdim=dp.eigN*2)
+
+        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
+
+        #TODO: in case of very high tolerance it will use all the krylovdim!!!
+        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
+        mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
+
+        #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)     
+        #TODO: schursolve
+        #println(size(mus[1],1))
+        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+
+        #println("Fix point calculation ---------- Start")
+        #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
+        #TODO: it might be better to incluse the mus calcluations here too
+        for k_fix_iteration in 1:30  #TODO:use input parameters for this with default value
+            # println("find_fix_pont_start")
+            s0 = a0
+            v0 = LinMap(dp, s0; p=p)[1]
+            a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T#TODO: kell a real? 
+            # println("find_fix_pont_end")
+            # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
+            normerror = norm(s0 - v0)
+            # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+            if (normerror) < 1e-35 #TODO:use input parameters for this with default value
+                #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
+                #  println("Fix point calculation ---------- End")
+                break
+            end
+        end
+        v0 = LinMap(dp, s0; p=p)[1]
         a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T#TODO: kell a real? 
-       # println("find_fix_pont_end")
-       # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
-        normerror = norm(s0 - v0)
-       # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
-        if (normerror) < 1e-15 #TODO:use input parameters for this with default value
-         #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
-          #  println("Fix point calculation ---------- End")
-            break
+        # println("find_fix_pont_end")
+        # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
+
+        #return mus[1]::Vector{ComplexF64}
+        v0, sol = LinMap(dp, s0; p=p)
+
+
+        Finished_itertaion += 1
+        do_more_iteration = Finished_itertaion < dp.affineinteration
+        if !do_more_iteration
+            return mus, s0::T, sol
         end
     end
-
-    #return mus[1]::Vector{ComplexF64}
-    v0,sol=LinMap(dp, s0; p=p)
-    return mus, s0::T,sol
 end
 
 function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
     #TODO: fixed dimension problem!!!!
-    
 
-#global NNN=0
+
+    #global NNN=0
     Nstep = size(dp.StateSmaplingTime, 1)
-    #s0 = zeros(typeof(dp.Problem.u0), Nstep)
-    s0 = [0.0* dp.Problem.u0 for _ in 1: Nstep]
-    #s0 = rand(typeof(dp.Problem.u0), Nstep)
+    s0 = rand(typeof(dp.Problem.u0), Nstep)
+    if dp.zerofixpont
+        #s0 = zeros(typeof(dp.Problem.u0), Nstep)
+        s0 .*= 0.0
+    end
+
     ##affine(dp, s0; p=p)
     #println("----------------------")
     #@show s0
     #@show typeof(s0)
     #println("------<<<<<<<<<<<<<<<<<<<--------")
-    
+
     muSFix = affine(dp, s0; p=p)#First iteration
-    for _ in 2:dp.affineinteration #secondary interation
-        muSFix = affine(dp, muSFix[2]; p=p)
-    end
-    
-#println(NNN)
+
+    #println(NNN)
     return muSFix
 
 end
 
-function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # where T
+function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T # where T
 
-    
-#global NNN +=1
+
+    #global NNN +=1
     #s = [SA[sv[1+(k-1)*2], sv[2+(k-1)*2]] for k in 1:size(sv, 1)÷2]
     #StateSmaplingTime = LinRange(-dp.maxdelay, Float64(0.0), size(s, 1))
     StateSmaplingTime = dp.StateSmaplingTime
@@ -194,15 +216,15 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint,p=p), MethodOfSteps(BS3()))#, save_everystep=false)#abstol,reltol
 
     #sol = solve(remake(dp.Problem; u0=hint(p, Float64(0.0)), tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg; verbose=false)#, save_everystep=false)#abstol,reltol
-    
-    println("zzzzzzzzzzzzzzzzzzzzz")
-    @show typeof(dp.Tperiod)
-    @show dp.Tperiod
-    @show hint(p, 0.0)
-    @show typeof(hint(p, 0.0))
+
+    #println("zzzzzzzzzzzzzzzzzzzzz")
+    #@show typeof(dp.Tperiod)
+    #@show dp.Tperiod
+    #@show hint(p, 0.0)
+    #@show typeof(hint(p, 0.0))
     sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
     #@show sol.t[end]
-    
+
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
     #### - NEM jó, mert ha definiálv van az u0 a felhasználó által, akkor azt nem módosítja és nem lesz jó!!!
     ####  sol = solve(remake(dp.Problem; tspan=(Float64(0.0), dp.Tperiod), h=hint, p=p), dp.alg, adaptive=false, dt=dt; verbose=false)#, save_everystep=false)#abstol,reltol
@@ -216,13 +238,13 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)where T#::T # w
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(RK4()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p), MethodOfSteps(ABM43()), adaptive=false, dt=dt)#, save_everystep=false)#abstol,reltol
     #TODO: saveat=ts - ez lassabbnak tűnik!
-    
+
     NewTimePoints = StateSmaplingTime .+ sol.t[end]
     v = [getvalues(sol, ti) for ti in NewTimePoints]
     #vv = reduce(vcat, v)
     #return vv::Vector{Float64}
     #return vv#::Vector{T}
-    return v,sol
+    return v, sol
 end
 
 #function LinMapPerturbed(dp::dynamic_problemSampled, sv::Vector{Float64})::Vector{Float64}
@@ -230,7 +252,7 @@ end
 #    return vv::Vector{Float64}
 #end
 
-function getvalues(sol::ODESolution, t::T) where T<:Real 
+function getvalues(sol::ODESolution, t::T) where {T<:Real}
     if t < 0.0
         sol.prob.h(sol.prob.p, t)::typeof(sol.prob.u0)
     elseif t == 0.0
@@ -245,8 +267,8 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     x = (v0 - s0)
 
     ##AtA = conj( eigvec' .* eigvec)
- #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
- #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
     AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
     ci = AtA \ Atx
