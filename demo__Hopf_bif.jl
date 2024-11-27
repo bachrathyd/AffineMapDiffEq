@@ -6,6 +6,8 @@ using DDE_mapping
 
 using BenchmarkTools
 using Plots
+theme(:dark)#:vibrant:dracula:rose_pine
+
 plotly()
 using Profile
 using StaticArrays
@@ -23,7 +25,7 @@ function DelayedNonlineOscill(u, h, p, t)
     ζ, δ, b, τ, μ = p
     # Components of the delayed differential equation
     dx = u[2]
-    ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^3
+    ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^3+ μ * u[2]^5
     #ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^2*sign(u[2])
     # Update the derivative vector
     SA[dx, ddx]
@@ -33,8 +35,10 @@ Base.:+(a::SVector, b::Bool) = a .+ b
 Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
 ζ = 0.01         # damping coefficient
 δ = 3.1#0.2          # nat. freq
-b = -2.8#-0.06#0.3
-τ = 0.5#2pi#0.5#2pi          # Time delay
+b = -2.8#stable per.orbit
+b = -3.15#unstable per.orbit
+b = -1#Hopf starting...
+τ = 2pi#0.5#2pi          # Time delay
 μ = 5.0
 p = ζ, δ, b, τ, μ
 #p = (ζ, ωn, k, τ,10.0)
@@ -77,7 +81,7 @@ plot!(sol_period[1, :], sol_period[2, :])
 ## ---------------- simulation max amplitude ----------------------
 ## parameters
 
-bv = LinRange(-2.0, 0.2, 110)
+bv = LinRange(-2.0, 1.2, 110)
 norm_solperiod = similar(bv)
 @time Threads.@threads for ib in eachindex(bv)
     println(ib)
@@ -105,8 +109,8 @@ plot(bv, norm_solperiod)
 
 ## ---------------- Affine mapping ---------------------------
 using KrylovKit
-Neig = 10#number of required eigen values
-Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-9, krylovdim=3 + 50, verbosity=0));
+Neig = 8#number of required eigen values
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-15, krylovdim=3 + 30, verbosity=0, eager=true));
 
 τmax = τ #maximal timedelay in the mapping
 Nstep = 100 # discretization number of the mapping
@@ -118,7 +122,7 @@ dp_0_Tfix = dynamic_problemSampled(prob_long, Solver_args, τmax,
     zerofixpont=true, affineinteration=0,
     Krylov_arg=Krylov_arg)
 
-bv_affine = LinRange(-2.0, 0.2, 201)
+bv_affine = LinRange(-2.0, 1.2, 201)
 λ_μ₀ = Any[similar(bv_affine)...]
 @time Threads.@threads for ib in eachindex(bv_affine)
     println(ib)
@@ -133,10 +137,9 @@ plot(bv, norm_solperiod)
 for k in 1#:Neig
     plot!(bv_affine, getindex.(λ_μ₀, k))
 end
-plot!()
+plot!(legend=false)
 
-
-
+## ---------------------------
 
 ##----------------------- DDE-Hopf amp stab -------------------
 
@@ -149,7 +152,7 @@ function affect_short!(integrator)
         terminate!(integrator)
     end
 end
-cb_short = ContinuousCallback(condition, affect_short!,nothing)
+cb_short = ContinuousCallback(condition, affect_short!, nothing)
 
 Solver_args_T_short = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-6,
     :callback => cb_short)#
@@ -162,60 +165,125 @@ Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64,Float64,1}) = x.value
 
 using KrylovKit
 Neig = 6#number of required eigen values
-Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-30, krylovdim=3 + 35, verbosity=0));
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-30, krylovdim=3 + 35, verbosity=0, eager=true));
 #Creating the problem
 Timeperiod = 20.0;#Tend
 
-dp_Hopf_callback = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
+
+
+τmax = τ #maximal timedelay in the mapping
+Nstep = 100 # discretization number of the mapping
+Timeperiod = Tend # timeperiod of the mapping
+
+#Creating the problem
+dp_0_cb = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
     Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false, affineinteration=2,
+    zerofixpont=false, affineinteration=3,
     Krylov_arg=Krylov_arg)
 
 
 
-ustart = rand(typeof(dp_Hopf_callback.Problem.u0), Nstep)
-ustart = ustart .* 0.0 .+ 0.51
-bv_affine_H = LinRange(-2.0, 0.2, 90)
+
+
+#------------------ initalization in a critical point --------------------------
+bcrit = bv_affine[findfirst(x -> x < 0, getindex.(λ_μ₀, 1))]
+b_H_start = -1.0#bcrit - 0.05;
+mu_c, saff_c, sol0_c = affine(dp_0_Tfix; p=(ζ, δ, bcrit, τ, μ));
+mu_c[1]
+T = mu_c[3]
+As = mu_c[2]
+Acrit = mu_c[2][1]
+
+
+
+
+plot(sol_delay[1, :], sol_delay[2, :])
+plot!(sol_period[1, :], sol_period[2, :])
+plot!(getindex.(Acrit, 1), getindex.(Acrit, 2), lw=1)
+#plot!(dp_0_Tfix.StateSmaplingTime, getindex.(Acrit,1),lw=2)
+#plot!(dp_0_Tfix.StateSmaplingTime, getindex.(Acrit,2),lw=2)
+
+Acrtit_cb = LinMap(dp_0_cb, Acrit; p=(ζ, δ, b_H_start, τ, μ))[1]
+plot!(getindex.(Acrtit_cb, 1), getindex.(Acrtit_cb, 2), lw=2)
+
+
+
+
+
+mu_c, saff_c, sol0_c = affine(dp_0_cb, Acrtit_cb * 10.0; p=(ζ, δ, b_H_start, τ, μ));
+scatter!(getindex.(saff_c, 1), getindex.(saff_c, 2), lw=2)
+scatter!(sol0_c[1, :], sol0_c[2, :])
+
+
+# ----------- brute force naive continuation ----------------
+
+#ustart = rand(typeof(dp_0_cb.Problem.u0), Nstep)
+#ustart = ustart .* 0.0 .+ 1.5
+ustart=saff_c
+#bv_affine_H = LinRange(-2.0, -0.951233, 27)
+#bv_affine_H = LinRange(-1.0, -4.0, 37)
+#bv_affine_H = LinRange(1.2, 0.08, 27)
+bv_affine_H = LinRange(b_H_start, -2.0, 150)
+bv_affine_H = [LinRange(b_H_start, -1.8, 10)...,LinRange(-1.81, -1.96, 40)...,LinRange(-1.96, -1.98, 100)...]
+
 λ_μ₀_Hopf = Any[similar(bv_affine_H)...]
 Amp_H = Any[similar(bv_affine_H)...]
+T_period_H = Any[similar(bv_affine_H)...]
 #
-plot()
-@time   for ib in eachindex(bv_affine_H)
+#plot()
+#Threads.@threads
+@time for ib in eachindex(bv_affine_H)
     println(ib)
-    bloc = bv_affine_H[ib]
-    mu, saff, sol0 = affine(dp_Hopf_callback, ustart; p=(ζ, δ, bloc, τ, μ))
+    @show bloc = deepcopy(bv_affine_H[ib])
+    @show typeof(bloc)
+    mu, saff, sol0 = affine(dp_0_cb, ustart; p=(ζ, δ, bloc, τ, μ))
     #mu, saff, sol0 = affine(dp_Hopf_callback; p=(ζ, δ, bloc, τ, μ))
     λ_μ₀_Hopf[ib] = log.(abs.(mu[1])) / sol0.t[end]
     #Amp[ib] = saff
-
-    #ustart=saff #TODO: enélkül nem áll be szépen
+    T_period_H[ib] = sol0.t[end]
     Amp_H[ib] = maximum(abs.(getindex.(saff, 1)))
-    plot!(sol0[1, :], sol0[2, :])
-    plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=1, lab="")#
+
+    ustart = saff #TODO: enélkül nem áll be szépen (de csak azért nem csinálta, mert affineinteration nem érvényesült)
+
+    #plot!(sol0[1, :], sol0[2, :])
+    #aaa=plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=1, lab="")#
+    #display(aaa)
+
+
 end
-plot!(legend=false)
+#plot!(legend=false)
 
 
 plot(bv, norm_solperiod)
-scatter!(bv_affine_H, Amp_H)
+marcolor=sign.(getindex.(λ_μ₀_Hopf, 1))
+scatter!(bv_affine_H, Amp_H,  zcolor=marcolor,color=:bamako,lw=0,markerstrokewidth=0)
 plot!(legend=false)
-##
+plot!(ylim=(-0.3, 1000.0))
+plot!(ylim=())
 
-#scatter()
-for k in 1:3
+
+
+for k in 1:Neig
     plot!(bv_affine_H, getindex.(λ_μ₀_Hopf, k))
+    #for ib in eachindex(bv_affine_H)
+    # scatter!([bv_affine_H[ib]], [λ_μ₀_Hopf[ib][k]])
+    #end
 end
 plot!()
-#plot!(ylim=(-1,30))
+plot!(ylim=(-0.5, 1.0))
 
+plot!(bv_affine_H, T_period_H ./ 10.0,lw=3)
 
 
+## TODO: csak itt tartok
+5 + 5
 
+## ------------------------------------------------------------------------------
+5+5
 
 
 
 
-#TODO: csak itt tartok
 
 
 
@@ -232,319 +300,146 @@ plot!()
 
 
 
-## ---------------------- Hopf solution -------------------
-b = -0.9
 
 
-Tlongsim = 500.2
-using ForwardDiff
-u01_Dual = ForwardDiff.Dual{Float64}(0.05, 2.0)
-u01_Dual.partials
-u01_Dual.value
 
-#initial condition
-u0 = SA[0.05, 0.1]
-#history function
-h(p, t) = SA[0.5; 0.0]
-prob = DDEProblem(DelayedNonlineOscill, u0, h, (0, Tlongsim), p; constant_lags=[τ])
 
-u0_DUAL = SA[ForwardDiff.Dual{Float64}(0.05, 2.0), ForwardDiff.Dual{Float64}(0.05, 2.0)]
-h_dual(p, t) = SA[ForwardDiff.Dual{Float64}(0.05, 2.0), ForwardDiff.Dual{Float64}(0.05, 2.0)]
-Tlongsim_DUAL = ForwardDiff.Dual{Float64}(Tlongsim, 0.0)
-prob_DUAL = DDEProblem(DelayedNonlineOscill, u0_DUAL, h_dual, (ForwardDiff.Dual{Float64}(0.0, 0.0), Tlongsim_DUAL), p; constant_lags=[τ])
 
 
-function condition(u, t, integrator) # Event when condition(u,t,integrator) == 0
-    u[2]
-end
-function affect_long!(integrator)
-    #println(typeof(integrator))
-    if integrator.t > 100.0#1500.0
-        terminate!(integrator)
-    end
-end
-function affect_short!(integrator)
-    if integrator.t > 5.0
-        terminate!(integrator)
-    end
-end
-using DifferentialEquations
-cb_long = ContinuousCallback(condition, affect_long!)
-cb_short = ContinuousCallback(condition, affect_short!)
 
-Solver_args_T_long = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-6,
-    :callback => cb_long)#
-Solver_args_T_short = Dict(:alg => MethodOfSteps(RK4()), :verbose => false, :reltol => 1e-6,
-    :callback => cb_short)#
 
-Nstep = 50
-#sol = solve(remake(prob_DUAL, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
-#plot(sol)
-sol = solve(remake(prob, p=(ζ, δ, b, τ, μ)); Solver_args_T_long...)#abstol,reltol
-plot(sol)
 
 
 
-t_select_period = LinRange(-Tend, 0, 500)
-sol_period = sol(sol.t[end] .+ t_select_period)
 
-t_select_delay = LinRange(-τ, 0, Nstep)
-sol_delay = sol(sol.t[end] .+ t_select_delay)
 
-plot(t_select_period, sol_period[1, :])
-plot!(t_select_period, sol_period[2, :])
-plot!(t_select_delay, sol_delay[1, :], lw=3)
-plot!(t_select_delay, sol_delay[2, :], lw=3)
 
 
-plot(sol[1, :], sol[2, :])
-plot!(sol_period[1, :], sol_period[2, :], lw=4)
-plot!(sol_delay[1, :], sol_delay[2, :], lw=4)
 
 
 
 
-#TODO: ez nem hiszem, hogy jó megoldás
-Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64,Float64,1}) = x.value
-
-using KrylovKit
-Neig = 4#number of required eigen values
-Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-20, krylovdim=3 + 20, verbosity=0));
-#Creating the problem
-Timeperiod = 20.0;#Tend
-
-dp_Hopf_callback = dynamic_problemSampled(prob, Solver_args_T_short, τmax,
-    Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false, affineinteration=4,
-    Krylov_arg=Krylov_arg)
-#@time mu, saff, sol0 = affine(dp_Hopf_callback, sol_delay.u; p=(ζ, δ, b, τ, μ))
-ustart = similar(sol_delay.u) .* 0.0 .+ 0.01
-ustart = sol_delay.u .+ 0.0001
-#ustart=sol_delay.u
-@time mu, saff, sol0 = affine(dp_Hopf_callback, ustart; p=(ζ, δ, b, τ, μ));
-@time mu, saff, sol0 = affine(dp_Hopf_callback; p=(ζ, δ, b, τ, μ));
-
-plot()
-plot!(getindex.(saff, 1), getindex.(saff, 2), marker=:circle, markersize=3, lab="")#
-plot!(sol0[1, :], sol0[2, :])
-plot!(legend=false)
-vaff, sol_s = LinMap(dp_Hopf_callback, saff, p=(ζ, δ, b, τ, μ))
-norm(saff - vaff)
-
-ustart = similar(sol_delay.u) .* 0.0 .+ 0.01
-
-s0 = saff
-s0 = similar(sol_delay.u) .* 0.0 .+ 0.03
-for _ in 1:4
-    plot!(getindex.(s0, 1), getindex.(s0, 2), marker=:circle, markersize=4, lab="")#
-    v0, sol_s = LinMap(dp_Hopf_callback, s0, p=(ζ, δ, b, τ, μ))
-    plot!(sol_s[1, :], sol_s[2, :])
-    s0 = v0
-    plot!(getindex.(v0, 1), getindex.(v0, 2), marker=:circle, markersize=4, lab="")#
-end
-plot!(legend=false)
-
-
-
-
-# Plotting the Floquet multipliers
-#in log scale
-plot(log.(abs.(mu[1])))
-#in complex plane
-scatter(mu[1])
-plot!(sin.(0:0.01:2pi), cos.(0:0.01:2pi))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ----------------------- creating stability chart -------------------------
-
-Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
-
-dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
-    Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false, affineinteration=1,
-    Krylov_arg=Krylov_arg)
-
-## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE in the plane of δ-ϵ  ----------------
-
-b = 0.05 # delay parameter, Note: b=0 provide the traditional stability chart of the Mathieu equations
-δv = -1.0:0.051:5.0 # initial grid in x direction
-ϵv = -0.001:0.05:10.0 # initial grid in y direction
-Aaff = zeros(size(ϵv, 1), size(δv, 1))
-Spek_aff = zeros(size(ϵv, 1), size(δv, 1))
-
-@time Threads.@threads for j in 1:size(δv, 1)
-    @inbounds δ = δv[j]
-    Threads.@threads for i in 1:size(ϵv, 1)
-        @inbounds ϵ = ϵv[i]
-        muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-        Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
-        # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
-        Spek_aff[i, j] = maximum(abs.(muaff[1]))
-    end
-end
-
-#Plotting the maximal amplitud on the stable domain only
-Aaffsat = deepcopy(Aaff);
-Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
-heatmap(δv, ϵv, log.(Aaffsat))
-
-
-
-#Plotting the maximal amplitud on the stable domain only
-Spek_affsat = deepcopy(Spek_aff);
-Spek_affsat[Spek_affsat.>1.0] .= 0.0;
-heatmap(δv, ϵv, log.(Spek_affsat))
-
-
-#------------------ Stability boundary - MDBM -----------------
-
-b = 0.05;
-ax1 = Axis(0:1:5, "δ") # initial grid in x direction
-ax2 = Axis(-0.001:2.0:10.0, "ϵ") # initial grid in y direction
-function fooDelay(δ, ϵ)
-    ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-    #return ABSmuMax - 1.0
-    return log(ABSmuMax)
-end
-mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
-@time MDBM.solve!(mymdbm, 5)
-#points where the function foo was evaluated
-x_eval, y_eval = getevaluatedpoints(mymdbm)
-x_sol, y_sol = getinterpolatedsolution(mymdbm)
-#scatter(x_eval,y_eval,markersize=1)
-#scatter!(x_sol,y_sol,markersize=2)
-scatter!(x_sol, y_sol, markersize=1)
-
-
-
-#--------------------------
-
-
-
-## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE  in the plane of δ-b-----------------
-
-Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
-
-dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
-    Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false, affineinteration=1,
-    Krylov_arg=Krylov_arg)
-
-
-δv = 0:0.051:10 # initial grid in x direction
-bv = -1.501:0.05:1.5 # initial grid in y direction
-Aaff = zeros(size(bv, 1), size(δv, 1))
-Spek_aff = zeros(size(bv, 1), size(δv, 1))
-
-@time Threads.@threads for j in 1:size(δv, 1)
-    @inbounds δ = δv[j]
-    Threads.@threads for i in 1:size(bv, 1)
-        @inbounds b = bv[i]
-        muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-        Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
-        # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
-        Spek_aff[i, j] = maximum(abs.(muaff[1]))
-    end
-end
-
-#Plotting the maximal amplitud on the stable domain only
-Aaffsat = deepcopy(Aaff);
-Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
-heatmap(δv, bv, log.(Aaffsat))
-
-
-
-#Plotting the maximal amplitud on the stable domain only
-Spek_affsat = deepcopy(Spek_aff);
-Spek_affsat[Spek_affsat.>1.0] .= 0.0;
-heatmap(δv, bv, log.(Spek_affsat))
-
-
-#------------------ Stability boundary - MDBM -----------------
-
-
-ax1 = Axis(0:2:10, "δ") # initial grid in x direction
-ax2 = Axis(-1.5:1.4:1.5, "b") # initial grid in y direction
-function fooDelay(δ, b)
-    ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-    return ABSmuMax - 1.0
-end
-mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
-@time MDBM.solve!(mymdbm, 4)
-#points where the function foo was evaluated
-x_eval, y_eval = getevaluatedpoints(mymdbm)
-x_sol, y_sol = getinterpolatedsolution(mymdbm)
-#scatter(x_eval,y_eval,markersize=1)
-#scatter!(x_sol,y_sol,markersize=2)
-scatter!(x_sol, y_sol, markersize=1)
+#### 
+#### # ----------------------- creating stability chart -------------------------
+#### 
+#### Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
+#### 
+#### dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
+####     Timeperiod; Historyresolution=Nstep,
+####     zerofixpont=false, affineinteration=1,
+####     Krylov_arg=Krylov_arg)
+#### 
+#### ## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE in the plane of δ-ϵ  ----------------
+#### 
+#### b = 0.05 # delay parameter, Note: b=0 provide the traditional stability chart of the Mathieu equations
+#### δv = -1.0:0.051:5.0 # initial grid in x direction
+#### ϵv = -0.001:0.05:10.0 # initial grid in y direction
+#### Aaff = zeros(size(ϵv, 1), size(δv, 1))
+#### Spek_aff = zeros(size(ϵv, 1), size(δv, 1))
+#### 
+#### @time Threads.@threads for j in 1:size(δv, 1)
+####     @inbounds δ = δv[j]
+####     Threads.@threads for i in 1:size(ϵv, 1)
+####         @inbounds ϵ = ϵv[i]
+####         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
+####         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
+####         # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
+####         Spek_aff[i, j] = maximum(abs.(muaff[1]))
+####     end
+#### end
+#### 
+#### #Plotting the maximal amplitud on the stable domain only
+#### Aaffsat = deepcopy(Aaff);
+#### Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
+#### heatmap(δv, ϵv, log.(Aaffsat))
+#### 
+#### 
+#### 
+#### #Plotting the maximal amplitud on the stable domain only
+#### Spek_affsat = deepcopy(Spek_aff);
+#### Spek_affsat[Spek_affsat.>1.0] .= 0.0;
+#### heatmap(δv, ϵv, log.(Spek_affsat))
+#### 
+#### 
+#### #------------------ Stability boundary - MDBM -----------------
+#### 
+#### b = 0.05;
+#### ax1 = Axis(0:1:5, "δ") # initial grid in x direction
+#### ax2 = Axis(-0.001:2.0:10.0, "ϵ") # initial grid in y direction
+#### function fooDelay(δ, ϵ)
+####     ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
+####     #return ABSmuMax - 1.0
+####     return log(ABSmuMax)
+#### end
+#### mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
+#### @time MDBM.solve!(mymdbm, 5)
+#### #points where the function foo was evaluated
+#### x_eval, y_eval = getevaluatedpoints(mymdbm)
+#### x_sol, y_sol = getinterpolatedsolution(mymdbm)
+#### #scatter(x_eval,y_eval,markersize=1)
+#### #scatter!(x_sol,y_sol,markersize=2)
+#### scatter!(x_sol, y_sol, markersize=1)
+#### 
+#### 
+#### 
+#### #--------------------------
+#### 
+#### 
+#### 
+#### ## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE  in the plane of δ-b-----------------
+#### 
+#### Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
+#### 
+#### dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
+####     Timeperiod; Historyresolution=Nstep,
+####     zerofixpont=false, affineinteration=1,
+####     Krylov_arg=Krylov_arg)
+#### 
+#### 
+#### δv = 0:0.051:10 # initial grid in x direction
+#### bv = -1.501:0.05:1.5 # initial grid in y direction
+#### Aaff = zeros(size(bv, 1), size(δv, 1))
+#### Spek_aff = zeros(size(bv, 1), size(δv, 1))
+#### 
+#### @time Threads.@threads for j in 1:size(δv, 1)
+####     @inbounds δ = δv[j]
+####     Threads.@threads for i in 1:size(bv, 1)
+####         @inbounds b = bv[i]
+####         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
+####         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
+####         # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
+####         Spek_aff[i, j] = maximum(abs.(muaff[1]))
+####     end
+#### end
+#### 
+#### #Plotting the maximal amplitud on the stable domain only
+#### Aaffsat = deepcopy(Aaff);
+#### Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
+#### heatmap(δv, bv, log.(Aaffsat))
+#### 
+#### 
+#### 
+#### #Plotting the maximal amplitud on the stable domain only
+#### Spek_affsat = deepcopy(Spek_aff);
+#### Spek_affsat[Spek_affsat.>1.0] .= 0.0;
+#### heatmap(δv, bv, log.(Spek_affsat))
+#### 
+#### 
+#### #------------------ Stability boundary - MDBM -----------------
+#### 
+#### 
+#### ax1 = Axis(0:2:10, "δ") # initial grid in x direction
+#### ax2 = Axis(-1.5:1.4:1.5, "b") # initial grid in y direction
+#### function fooDelay(δ, b)
+####     ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
+####     return ABSmuMax - 1.0
+#### end
+#### mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
+#### @time MDBM.solve!(mymdbm, 4)
+#### #points where the function foo was evaluated
+#### x_eval, y_eval = getevaluatedpoints(mymdbm)
+#### x_sol, y_sol = getinterpolatedsolution(mymdbm)
+#### #scatter(x_eval,y_eval,markersize=1)
+#### #scatter!(x_sol,y_sol,markersize=2)
+#### scatter!(x_sol, y_sol, markersize=1)
+#### 
