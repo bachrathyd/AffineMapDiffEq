@@ -13,7 +13,7 @@ using ForwardDiff
 
 export dynamic_problemSampled,affine,spectralradius,
 spectrum,LinMap,
-partialpart
+partialpart,valuepart,find_fix_pont
 
 include("DDE_mapping_types.jl")
 include("DDE_mapping_functions.jl")

@@ -17,7 +17,7 @@ struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     #eigN#::Tint # number of eigen vectors
     #KrylovTol#::Float64
     #KrylovExtraDim::Int
-    Δu_Δλ # for continuation
+    #Δu_Δλ # for continuation
 end
 
 #DODOAU

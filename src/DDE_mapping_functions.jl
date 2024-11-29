@@ -78,18 +78,11 @@ function valuepart(xSA)#::SVector)
     #return MVector(bb...);
 end
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,Δu_Δλ=s0 .* 0.0) where T
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,pDual=p .* 0.0 .+ ForwardDiff.Dual{Float64}(0.0, 1.0),Δu_Δλ=s0 .* 0.0) where T
     #TODO: fixed dimension problem!!!!
-    v0_dual = LinMap(dp, s0; p=p)[1]
+    v0_dual = LinMap(dp, s0; p=p .+ pDual)[1]
     v0=valuepart.(v0_dual)
     dv0dλ=partialpart.(v0_dual)
-
-
-    #println(norm(s0-v0))
-    Nstep = size(dp.StateSmaplingTime, 1)
-    s_start = rand(typeof(dp.Problem.u0), Nstep)
-
-
 
 
     Finished_itertaion = 0
@@ -130,16 +123,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,Δu_Δλ=s0 .*
 #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
     a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2],dv0dλ,Δu_Δλ))::T
 
-        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM,orth::KrylovKit.ClassicalGramSchmidt()),[3,2,1])
 
-        #TODO: in case of very high tolerance it will use all the krylovdim!!!
-        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
-        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
-        mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
-
-        #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
-        #TODO: schursolve
-        #println(size(mus[1],1))
         a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
 
         #println("Fix point calculation ---------- Start")
