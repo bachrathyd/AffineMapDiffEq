@@ -78,11 +78,11 @@ function valuepart(xSA)#::SVector)
     #return MVector(bb...);
 end
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,pDual=p .* 0.0 .+ ForwardDiff.Dual{Float64}(0.0, 1.0),Δu_Δλ=s0 .* 0.0) where T
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual=p .* 0.0 .+ ForwardDiff.Dual{Float64}(0.0, 1.0), Δu_Δλ=s0 .* 0.0) where {T}
     #TODO: fixed dimension problem!!!!
     v0_dual = LinMap(dp, s0; p=p .+ pDual)[1]
-    v0=valuepart.(v0_dual)
-    dv0dλ=partialpart.(v0_dual)
+    v0 = valuepart.(v0_dual)
+    dv0dλ = partialpart.(v0_dual)
 
 
     Finished_itertaion = 0
@@ -110,21 +110,19 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,pDual=p .* 0.0
 
         # s_start = rand(typeof(dp.Problem.u0), Nstep) * ForwardDiff.Dual(0.0, 1.0)
 
-    #TODO: in case of very high tolerance it will use all the krylovdim!!!
-    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
-    #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
-    mus = getindex(schursolve(TheMapping, s_start,dp.Krylov_arg...), [3, 2, 1])
+        #TODO: in case of very high tolerance it will use all the krylovdim!!!
+        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(krylovdim=dp.eigN +dp.KrylovExtraDim, tol=dp.KrylovTol, verbosity=0)), [3, 2, 1])
+        #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
+        mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
 
-    #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
-    #TODO: schursolve
-    #println(size(mus[1],1))
-
-
-#    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
-    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2],dv0dλ,Δu_Δλ))::T
+        #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
+        #TODO: schursolve
+        #println(size(mus[1],1))
 
 
-        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+        #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
+        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T
+
 
         #println("Fix point calculation ---------- Start")
         #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
@@ -133,7 +131,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,pDual=p .* 0.0
             # println("find_fix_pont_start")
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
-            a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T#TODO: kell a real?
+            a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T#TODO: kell a real?
             # println("find_fix_pont_end")
             # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
             normerror = norm(s0 - v0)
@@ -145,7 +143,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p,pDual=p .* 0.0
             end
         end
         v0 = LinMap(dp, s0; p=p)[1]
-        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T#TODO: kell a real?
+        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T#TODO: kell a real?
         # println("find_fix_pont_end")
         # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
 
@@ -277,8 +275,8 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
     AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
 
-   # println("------------------------------------")
-   # println(AtA)
+    # println("------------------------------------")
+    # println(AtA)
     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
     ci = AtA \ Atx
 
@@ -291,20 +289,20 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     return fix_v
 end
 
-function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec,dv0dλ,Δu_Δλ)
+function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec, dv0dλ, Δu_Δλ)
     x = (v0 - s0)
 
-    ##AtA = conj( eigvec' .* eigvec)
- #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
- #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### ##AtA = conj( eigvec' .* eigvec)
+    #### #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    #### AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### 
+    #### # println("------------------------------------")
+    #### # println(AtA)
+     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    #### ci = AtA \ Atx
 
-   # println("------------------------------------")
-   # println(AtA)
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
-    ci = AtA \ Atx
-
-    #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
     ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
@@ -319,17 +317,17 @@ end
 function Constratint_find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     x = (v0 - s0)
 
-    ##AtA = conj( eigvec' .* eigvec)
- #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
- #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### ##AtA = conj( eigvec' .* eigvec)
+    #### #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
+    #### AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #### 
+    #### # println("------------------------------------")
+    #### # println(AtA)
+     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    #### ci = AtA \ Atx
 
-   # println("------------------------------------")
-   # println(AtA)
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
-    ci = AtA \ Atx
-
-    #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
     ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
