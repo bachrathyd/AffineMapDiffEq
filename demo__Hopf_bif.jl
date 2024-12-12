@@ -3,7 +3,7 @@
  
 using Revise
 using DDE_mapping
- 
+
 #using BenchmarkTools
 using Plots
 theme(:dark)#:vibrant:dracula:rose_pine
@@ -19,6 +19,9 @@ using LinearAlgebra
 using FileIO
 using Suppressor
 
+# using MDBM
+
+using FileIO
 # Governing equation
 
 function DelayedNonlineOscill(u, h, p, t)
@@ -240,7 +243,7 @@ ustart = saff_c
 #bv_affine_H = LinRange(1.2, 0.08, 27)
 bv_affine_H = LinRange(b_H_start, -2.0, 150)
 bv_affine_H = [LinRange(b_H_start, -1.8, 10)..., LinRange(-1.81, -1.96, 40)..., LinRange(-1.96, -1.98, 100)...]
- 
+
 bv_affine_H = [LinRange(b_H_start, 2, 100)...]
 bv_affine_H = [b_H_start:0.01:2.0...]
  
@@ -272,7 +275,7 @@ T_period_H = Any[similar(bv_affine_H)...]
  
 end
 #plot!(legend=false)
- 
+
 ##--------
 plot(bv, norm_solperiod)
 marcolor = sign.(getindex.(λ_μ₀_Hopf, 1))
@@ -292,14 +295,13 @@ for k in 1:Neig
 end
 plot!()
 plot!(ylim=(-0.5, 1.0))
- 
+
 plot!(bv_affine_H, T_period_H ./ 10.0, lw=3)
- 
- 
+
+
 # ------------------------------------------------------------------------------
 # TODO: csak itt tartok -  tesztelgetés
 # Pseudo-archlength method
-
 5 + 5
 b_H_start = 0.1
 λ_start = b_H_start
@@ -307,86 +309,216 @@ p = (ζ, δ, b_H_start, τ, μ)
 p_start = p
 #initialization of a step:
 mu_c, s0_start, sol0_c = affine(dp_0_cb, Acrtit_cb * 10.0; p=p_start);
- 
- 
-#Δλ = 0.02#05
-#Δλ = 0.005
+
+
+Δλ = 0.02#05
+Δλ = 0.005
 Δλ = 0.05
 p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
 mu_c, s0, sol0_c = affine(dp_0_cb, s0_start; p=p);
 
-#bracnch=Any[]
-#bracnch[1]=s0_start
- 
-p1=scatter!([p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))], markersize=2)
+
+scatter!s([p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))], markersize=2)
 #scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))])
-# #mu_c_m1, saff_c_m1, sol0_c_m1 = affine(dp_0_cb, s0_start; p=(ζ, δ, b_H_start - 0.01, τ, μ));
-# # #scatter(getindex.(saff_c, 1), getindex.(saff_c, 2), lw=2)
-# # #scatter!(sol0_c[1, :], sol0_c[2, :])
-# #
-# #maximum(abs.(getindex.(saff_c, 1)))
-# #maximum(abs.(getindex.(saff_c_m1, 1)))
-# #Δu_Δλ = (saff_c .- saff_c_m1) ./ 0.01
-# #
-# #
-# # #f(x) = affine(dp_0_cb, Acrtit_cb * 10.0; p=(ζ, δ, b_H_start + x, τ, μ))[2]
-# # #df(x) = (f(x) - f(x - 0.01)) ./ 0.01
-# # #ddd = df(0.00)
-# #
-# #
-# #
-# #Δλ = 0.03
-# #p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
-# #s0 = s0_start .+ Δu_Δλ
-# scale=10.0
-# or _ in 1:5#32
- 
-# #using JLD2
-# # #@save "bifurcation_till_Fold_point.jld2"
-# #@load "bifurcation_till_Fold_point.jld2"
- 
+###mu_c_m1, saff_c_m1, sol0_c_m1 = affine(dp_0_cb, s0_start; p=(ζ, δ, b_H_start - 0.01, τ, μ));
+####scatter(getindex.(saff_c, 1), getindex.(saff_c, 2), lw=2)
+####scatter!(sol0_c[1, :], sol0_c[2, :])
+###
+###maximum(abs.(getindex.(saff_c, 1)))
+###maximum(abs.(getindex.(saff_c_m1, 1)))
+###Δu_Δλ = (saff_c .- saff_c_m1) ./ 0.01
+###
+###
+####f(x) = affine(dp_0_cb, Acrtit_cb * 10.0; p=(ζ, δ, b_H_start + x, τ, μ))[2]
+####df(x) = (f(x) - f(x - 0.01)) ./ 0.01
+####ddd = df(0.00)
+###
+###
+###
+###Δλ = 0.03
+###p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
+###s0 = s0_start .+ Δu_Δλ
+#λscale=10.0
+#for _ in 1:5#32
+
+##using JLD2
+###@save "bifurcation_till_Fold_point.jld2" 
+##@load "bifurcation_till_Fold_point.jld2"
+
 λscale = 100.0
-p2=scatter()
-p3=scatter()
-Nconti=1
-step_scale=1.0
+for Nconti in 1:(5*340)#34
+    @show Nconti
+    Δu = s0 - s0_start
+    @show Δλ = p[3] - λ_start
+
+    s0_start = deepcopy(s0)
+    p_start = deepcopy(p)
+    @show λ_start = p[3]
+    #scatter!([p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))],markersize=5)
+    if p[3] > 2.1
+        break
+    end
+    if p[3] > 1.85
+              @show   lamscale = 1.0#0.7#0.0#0.7
+    else
+        @show  lamscale = 1.0
+    end
+    s0 .+= Δu * lamscale
+    #s0 = s0 + Δu_Δλ * Δλ
+    p = p .+ (0.0, 0.0, Δλ * lamscale, 0.0, 0.0)
+    #mu, saff, sol0 = affine(dp_0_Tfix; p=(ζ, δ, bloc+one_espilon_Dual, τ, μ))
+    dp = dp_0_cb
+    Nstep = size(dp.StateSmaplingTime, 1)
+    #s0 = rand(typeof(dp.Problem.u0), Nstep)
+    #s0 .*= 0.0
+    #s0 = Acrtit_cb * 10.0
+    @warn "perturbation to see the convergence"
+    #s0 .+= 0.001 
+    #s0 .*= 1.05
+
+    scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=3)
+    scatter!(xlim=(0.09, 0.25), ylim=(0.05, 0.12))
+
+
+
+
+    # iteration within a step -------
+
+    for kk_out in 1:3
+        #pDual=p .* 0.0 .+ ForwardDiff.Dual{Float64}(0.0, 1.0)
+        pDual = p .+ (0.0, 0.0, ForwardDiff.Dual{Float64}(0.0, 1.0), 0.0, 0.0)
+
+        v0 = LinMap(dp, s0; p=p)[1]
+        v0_dual = LinMap(dp, s0; p=pDual)[1]
+        v0 = valuepart.(v0_dual)
+        dv0dλ = partialpart.(v0_dual)
+
+
+        #v02 = LinMap(dp, s0; p=(ζ, δ, b_H_start, τ, μ))[1]
+        #v01 = LinMap(dp, s0; p=(ζ, δ, b_H_start - 0.001, τ, μ))[1]
+        #dvdl = (v02 - v01) / 0.001
+        #dv0dλ - dvdl
+
+        norm(s0 - v0)
+
+        TheMapping(s) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)
+        Nstep = size(dp.StateSmaplingTime, 1)
+        s_start = rand(typeof(dp.Problem.u0), Nstep)
+
+        mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
+
+
+        eigval = mus[1]
+        eigvec = mus[2]
+
+
+        v0 = LinMap(dp, s0; p=p)[1]
+
+        #scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))])
+        scatter!(xlim=(0.09, 0.25), ylim=(0.05, 0.12))
+
+        #a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))
+        ## println("find_fix_pont_end")
+        ## s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
+        #@show normerror = norm(s0 - v0)
+        #s0 = a0;
+        #scatter!([p[3]],[maximum(abs.(getindex.(s0, 1)))],xlim=(0.09,0.13),ylim=(0.05,0.07))
+
+        begin
+            for kkkk in 1:3
+                #a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2],dv0dλ,Δu_Δλ))
+                x = (v0 - s0)
+
+                # println("------------------------------------")
+                # println(AtA)
+                Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+
+
+
+                #ci = Atx #TODO: ez ugyan azt adja Schur esetén!!!
+                #ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
+                #fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+                #Δλ = 0.0
+                #error("itt tartok, valahol itt kell előjeleket kereseni talán")
+
+                Atdvdlam = [dot(eigvec[i], dv0dλ) for i in 1:size(eigvec, 1)]
+                #Δu_ΔλAt = [dot(Δu_Δλ, eigvec[i]) for i in 1:size(eigvec, 1)]
+                #T_jac = vcat(hcat(diagm(eigval .- 1.0), -Atdvdlam),
+                #    hcat(-Δu_ΔλAt', 100.0))
+                ΔuAt = [dot(Δu, eigvec[i]) for i in 1:size(eigvec, 1)]
+                T_jac = vcat(hcat(diagm(eigval .- 1.0), -Atdvdlam),
+                    hcat(-ΔuAt', λscale * Δλ))
+                ci_arch = T_jac \ vcat(Atx, 0.0)
+                ci = ci_arch[1:end-1]
+                Δλ_loc = real.(ci_arch[end])
+                ci_mu_ach = ci .* (eigval)
+                ci_mu = ci_mu_ach
+                #A=transpose(mapreduce(permutedims, vcat, eigvec))
+                #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
+
+                fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+                #fix_v = s0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci))
+                s0 = real.(fix_v)
+
+                v0_dual = LinMap(dp, s0; p=pDual)[1]
+                v0 = valuepart.(v0_dual)
+                dv0dλ = partialpart.(v0_dual)
+
+
+                p = p .+ (0.0, 0.0, Δλ_loc, 0.0, 0.0)
+                norm(s0 - LinMap(dp, s0; p=p)[1])
+
+                scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=1)
+                scatter!(xlim=(2.002, 2.02), ylim=(0.43, 0.45))
+            end
+        end
+        scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=2)
+        #scatter!(xlim=(0.09,0.13),ylim=(0.05,0.07))
+
+    end
+    scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=4)
+    #scatter!(xlim=(0.09,0.13),ylim=(0.05,0.07))
+    aaa = scatter!(xlim=(0.00, 2.3), ylim=(0.00, 0.8))
+    display(aaa)
+end
+scatter!(xlim=(0.00, 2.3), ylim=(0.00, 0.8))
 
 # using JLD2
-# #@save "bifurcation_till_Fold_point.jld2"
+# #@save "bifurcation_till_Fold_point.jld2" 
 # @load "bifurcation_till_Fold_point.jld2"
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
- 
-####
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#### 
 #### # ----------------------- creating stability chart -------------------------
 ####
 #### Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
