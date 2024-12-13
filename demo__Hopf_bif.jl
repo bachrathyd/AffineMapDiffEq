@@ -359,7 +359,7 @@ scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=4, m=:cr
 #using JLD2
 #@save "bifurcation_till_Fold_point.jld2" 
 #@load "bifurcation_till_Fold_point.jld2"
-norm_limit = 1e-5
+norm_limit = 1e-3
 iteration_gola=5
 Niteration = iteration_gola
 maxΔλ=0.2
@@ -369,7 +369,7 @@ maxΔλ=0.2
     λscale = 10.0
     lamscale = 1.0
     Nconti = 1
-    for Nconti in 1:(5*340)#34
+    for Nconti in 1:40#(5*340)#34
         println("---------------------------")
         @show Nconti
         Δu = s0 - s0_start
@@ -455,7 +455,7 @@ maxΔλ=0.2
             #scatter!([p[3]],[maximum(abs.(getindex.(s0, 1)))],xlim=(0.09,0.13),ylim=(0.05,0.07))
 
             begin
-                for kkkk in 1:5
+                for kkkk in 1:1
                     
                 Niteration += 1
                     #a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2],dv0dλ,Δu_Δλ))
@@ -479,9 +479,9 @@ maxΔλ=0.2
                     #T_jac = vcat(hcat(diagm(eigval .- 1.0), -Atdvdlam),
                     #    hcat(-Δu_ΔλAt', 100.0))
                     ΔuAt = [dot(Δu, eigvec[i]) for i in 1:size(eigvec, 1)]
-                    T_jac = vcat(hcat(diagm(eigval .- 1.0), -Atdvdlam),
-                        hcat(-ΔuAt', λscale * Δλ))
-                    ci_arch = T_jac \ vcat(Atx, 0.0)
+                    T_jac = vcat(hcat(diagm(eigval .- 1.0), Atdvdlam),
+                        hcat(ΔuAt', λscale * Δλ))
+                    ci_arch = T_jac \ vcat(-Atx, 0.0)
                     ci = ci_arch[1:end-1]
                     Δλ_loc = real.(ci_arch[end])
                     ci_mu_ach = ci .* (eigval)
@@ -489,7 +489,7 @@ maxΔλ=0.2
                     #A=transpose(mapreduce(permutedims, vcat, eigvec))
                     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
 
-                    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+                    fix_v = v0 + mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
                     #fix_v = s0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci))
                     s0 = real.(fix_v)
 
@@ -532,10 +532,12 @@ maxΔλ=0.2
         display(out)
     end
 end
-scatter!(fig_bif, xlim=(0.00, 2.3), ylim=(0.00, 0.8))
-scatter!(fig_normerror, xlim=(0.00, 2.3))
-out = plot(fig_bif, fig_normerror, fig_abs_mus,fig_path,layout=(2, 2))
 
 # using JLD2
 # #@save "bifurcation_till_Fold_point.jld2" 
 # @load "bifurcation_till_Fold_point.jld2"
+
+
+scatter!(fig_bif, xlim=(0.00, 2.3), ylim=(0.00, 0.8))
+scatter!(fig_normerror, xlim=(0.00, 2.3))
+out = plot(fig_bif, fig_normerror, fig_abs_mus,fig_path,layout=(2, 2))
