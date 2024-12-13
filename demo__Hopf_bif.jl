@@ -285,7 +285,8 @@ end
 plot(bv, norm_solperiod)
 marcolor = sign.(getindex.(λ_μ₀_Hopf, 1))
 #, color=:bamako
-scatter!(bv_affine_H, Amp_H, zcolor=marcolor, lw=0, markerstrokewidth=0)
+#scatter!(bv_affine_H, Amp_H, zcolor=marcolor, lw=0, markerstrokewidth=0)
+scatter!(bv_affine_H, Amp_H, lw=0, markerstrokewidth=0)
 plot!(legend=false)
 plot!(ylim=(-0.3, 1000.0))
 plot!(ylim=())
@@ -311,7 +312,7 @@ fig_abs_mus = scatter(yaxis=:log)
 fig_path = plot()
 # Pseudo-archlength method
 5 + 5
-b_H_start = 0.1
+b_H_start = 0.2
 λ_start = b_H_start
 p = (ζ, δ, b_H_start, τ, μ)
 p_start = p
@@ -331,8 +332,8 @@ mu_c, s0, sol0_c = affine(dp_0_cb, s0; p=p);
 
 
 
-scatter!(fig_bif, [p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))], markersize=2)
-scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=2)
+scatter!(fig_bif, [p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))], markersize=4, m=:cross)
+scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=4, m=:cross)
 #scatter!([p[3]], [maximum(abs.(getindex.(s0, 1)))])
 # # #mu_c_m1, saff_c_m1, sol0_c_m1 = affine(dp_0_cb, s0_start; p=(ζ, δ, b_H_start - 0.01, τ, μ));
 # # #scatter(getindex.(saff_c, 1), getindex.(saff_c, 2), lw=2)
@@ -359,8 +360,8 @@ scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=2)
 #@save "bifurcation_till_Fold_point.jld2" 
 #@load "bifurcation_till_Fold_point.jld2"
 norm_limit = 1e-5
-Niteration = 4
-iteration_gola=7
+iteration_gola=5
+Niteration = iteration_gola
 maxΔλ=0.2
 
 
@@ -533,164 +534,8 @@ maxΔλ=0.2
 end
 scatter!(fig_bif, xlim=(0.00, 2.3), ylim=(0.00, 0.8))
 scatter!(fig_normerror, xlim=(0.00, 2.3))
-plot(fig_bif, fig_normerror, layout=(2, 1))
+out = plot(fig_bif, fig_normerror, fig_abs_mus,fig_path,layout=(2, 2))
 
 # using JLD2
 # #@save "bifurcation_till_Fold_point.jld2" 
 # @load "bifurcation_till_Fold_point.jld2"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### 
-#### # ----------------------- creating stability chart -------------------------
-####
-#### Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
-####
-#### dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
-####     Timeperiod; Historyresolution=Nstep,
-####     zerofixpont=false, affineinteration=1,
-####     Krylov_arg=Krylov_arg)
-####
-#### ## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE in the plane of δ-ϵ  ----------------
-####
-#### b = 0.05 # delay parameter, Note: b=0 provide the traditional stability chart of the Mathieu equations
-#### δv = -1.0:0.051:5.0 # initial grid in x direction
-#### ϵv = -0.001:0.05:10.0 # initial grid in y direction
-#### Aaff = zeros(size(ϵv, 1), size(δv, 1))
-#### Spek_aff = zeros(size(ϵv, 1), size(δv, 1))
-####
-#### @time Threads.@threads for j in 1:size(δv, 1)
-####     @inbounds δ = δv[j]
-####     Threads.@threads for i in 1:size(ϵv, 1)
-####         @inbounds ϵ = ϵv[i]
-####         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-####         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
-####         # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
-####         Spek_aff[i, j] = maximum(abs.(muaff[1]))
-####     end
-#### end
-####
-#### #Plotting the maximal amplitud on the stable domain only
-#### Aaffsat = deepcopy(Aaff);
-#### Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
-#### heatmap(δv, ϵv, log.(Aaffsat))
-####
-####
-####
-#### #Plotting the maximal amplitud on the stable domain only
-#### Spek_affsat = deepcopy(Spek_aff);
-#### Spek_affsat[Spek_affsat.>1.0] .= 0.0;
-#### heatmap(δv, ϵv, log.(Spek_affsat))
-####
-####
-#### #------------------ Stability boundary - MDBM -----------------
-####
-#### b = 0.05;
-#### ax1 = Axis(0:1:5, "δ") # initial grid in x direction
-#### ax2 = Axis(-0.001:2.0:10.0, "ϵ") # initial grid in y direction
-#### function fooDelay(δ, ϵ)
-####     ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-####     #return ABSmuMax - 1.0
-####     return log(ABSmuMax)
-#### end
-#### mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
-#### @time MDBM.solve!(mymdbm, 5)
-#### #points where the function foo was evaluated
-#### x_eval, y_eval = getevaluatedpoints(mymdbm)
-#### x_sol, y_sol = getinterpolatedsolution(mymdbm)
-#### #scatter(x_eval,y_eval,markersize=1)
-#### #scatter!(x_sol,y_sol,markersize=2)
-#### scatter!(x_sol, y_sol, markersize=1)
-####
-####
-####
-#### #--------------------------
-####
-####
-####
-#### ## ------------------ Peak-2-Peak ampNorm color, and spectral radius - BRUTE FORCE  in the plane of δ-b-----------------
-####
-#### Krylov_arg = (1, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=8 + 5, verbosity=0));
-####
-#### dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
-####     Timeperiod; Historyresolution=Nstep,
-####     zerofixpont=false, affineinteration=1,
-####     Krylov_arg=Krylov_arg)
-####
-####
-#### δv = 0:0.051:10 # initial grid in x direction
-#### bv = -1.501:0.05:1.5 # initial grid in y direction
-#### Aaff = zeros(size(bv, 1), size(δv, 1))
-#### Spek_aff = zeros(size(bv, 1), size(δv, 1))
-####
-#### @time Threads.@threads for j in 1:size(δv, 1)
-####     @inbounds δ = δv[j]
-####     Threads.@threads for i in 1:size(bv, 1)
-####         @inbounds b = bv[i]
-####         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-####         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
-####         # Aaff[i,j]= maximum(abs.(getindex.(s0aff,1))) #maximum amplitude of the orbit
-####         Spek_aff[i, j] = maximum(abs.(muaff[1]))
-####     end
-#### end
-####
-#### #Plotting the maximal amplitud on the stable domain only
-#### Aaffsat = deepcopy(Aaff);
-#### Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
-#### heatmap(δv, bv, log.(Aaffsat))
-####
-####
-####
-#### #Plotting the maximal amplitud on the stable domain only
-#### Spek_affsat = deepcopy(Spek_aff);
-#### Spek_affsat[Spek_affsat.>1.0] .= 0.0;
-#### heatmap(δv, bv, log.(Spek_affsat))
-####
-####
-#### #------------------ Stability boundary - MDBM -----------------
-####
-####
-#### ax1 = Axis(0:2:10, "δ") # initial grid in x direction
-#### ax2 = Axis(-1.5:1.4:1.5, "b") # initial grid in y direction
-#### function fooDelay(δ, b)
-####     ABSmuMax = spectralradius(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
-####     return ABSmuMax - 1.0
-#### end
-#### mymdbm = MDBM_Problem(fooDelay, [ax1, ax2])
-#### @time MDBM.solve!(mymdbm, 4)
-#### #points where the function foo was evaluated
-#### x_eval, y_eval = getevaluatedpoints(mymdbm)
-#### x_sol, y_sol = getinterpolatedsolution(mymdbm)
-#### #scatter(x_eval,y_eval,markersize=1)
-#### #scatter!(x_sol,y_sol,markersize=2)
-#### scatter!(x_sol, y_sol, markersize=1)
-####
