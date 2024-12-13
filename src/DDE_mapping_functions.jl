@@ -78,9 +78,14 @@ function valuepart(xSA)#::SVector)
     #return MVector(bb...);
 end
 
-function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual=p .* 0.0 .+ ForwardDiff.Dual{Float64}(0.0, 1.0), Δu_Δλ=s0 .* 0.0) where {T}
+function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .* 0.0, Δu=s0 .* 0.0, Δλ_scaled=1.0, norm_limit=1e-10) where {T}
+    # # #maximum(abs.(getindex.(saff_c, 1)))
+    # # #maximum(abs.(getindex.(saff_c_m1, 1)))
+    # # #Δu_Δλ = (saff_c .- saff_c_m1) ./ 0.01
+    one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+    Niteration = 0
     #TODO: fixed dimension problem!!!!
-    v0_dual = LinMap(dp, s0; p=p .+ pDual)[1]
+    v0_dual = LinMap(dp, s0; p=p .+ one_espilon_Dual .* pDual_dir)[1]
     v0 = valuepart.(v0_dual)
     dv0dλ = partialpart.(v0_dual)
 
@@ -102,7 +107,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual=p .* 0.
         # TheMapping(s::T) = (LinMap(dp, s + s0; p=p)[1] - v0)::T
         #else
         #println("Dual perturbation - it seems to be faster! ;-)")
-        one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
+        #one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
         TheMapping(s::T) = partialpart.(LinMap(dp, s * one_espilon_Dual + s0; p=p)[1] - v0)::T
         #end
 
@@ -115,46 +120,52 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual=p .* 0.
         #mus = getindex(schursolve(TheMapping, s_start, dp.eigN, :LM, KrylovKit.Arnoldi(verbosity=2)), [3, 2, 1])
         mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
 
+        eigval = mus[1]
+        eigvec = mus[2]
         #  mus = issi_eigen(dp::dynamic_problemSampled,p=p)
         #TODO: schursolve
         #println(size(mus[1],1))
 
 
         #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
-        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T
-
+        a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T
+        p = p .+ pDual_dir .* Δλ_loc
 
         #println("Fix point calculation ---------- Start")
-        #println(norm(s0 - LinMap(dp, s0; p=p)[1]))
         #TODO: it might be better to incluse the mus calcluations here too
         for k_fix_iteration in 1:30  #TODO:use input parameters for this with default value
+
+            Niteration += 1
             # println("find_fix_pont_start")
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
-            a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T#TODO: kell a real?
+            a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T#TODO: kell a real?
+            p = p .+ pDual_dir .* Δλ_loc
             # println("find_fix_pont_end")
-            # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
             normerror = norm(s0 - v0)
-            # println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
-            if (normerror) < 1e-35 #TODO:use input parameters for this with default value
+            if (normerror) < norm_limit #TODO:use input parameters for this with default value
                 #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
                 #  println("Fix point calculation ---------- End")
                 break
             end
+            # # #             scatter!(fig_normerror, [p[3]], [norm(s0 - v0)], markersize=1, yaxis=:log)
+            # # #             scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=1)
         end
         v0 = LinMap(dp, s0; p=p)[1]
-        a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu_Δλ))::T#TODO: kell a real?
+        a0, Δλ_loc = (find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu, Δλ_scaled))#::T#TODO: kell a real?
+        p = p .+ pDual_dir .* Δλ_loc
         # println("find_fix_pont_end")
         # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
 
         #return mus[1]::Vector{ComplexF64}
+        s0 = a0
         v0, sol = LinMap(dp, s0; p=p)
-
-
+        normerror = norm(s0 - v0)
+        # # #     scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=2)
         Finished_itertaion += 1
         do_more_iteration = Finished_itertaion < dp.affineinteration
         if !do_more_iteration
-            return mus, s0::T, sol
+            return mus, s0::T, sol, p, Niteration, normerror
         end
     end
 end
@@ -267,7 +278,7 @@ function getvalues(sol::ODESolution, t::T) where {T<:Real}
 end
 
 #function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval::AbstractVector,eigvec::Vector{<:AbstractVector})
-function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
+function find_fix_pont(s0::T, v0::T, eigval, eigvec) where {T}
     x = (v0 - s0)
 
     ##AtA = conj( eigvec' .* eigvec)
@@ -286,29 +297,33 @@ function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
 
     fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
-    return fix_v
+    return fix_v, 0
 end
 
-function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec, dv0dλ, Δu_Δλ)
+function find_fix_pont(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::Tlam) where {T,Tlam}
     x = (v0 - s0)
 
-    #### ##AtA = conj( eigvec' .* eigvec)
-    #### #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    #### AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### 
-    #### # println("------------------------------------")
-    #### # println(AtA)
-     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
-    #### ci = AtA \ Atx
+    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
 
-    ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
-    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
+    Atdvdlam = [dot(eigvec[i], dv0dλ) for i in 1:size(eigvec, 1)]
+
+    ΔuAt = [dot(Δu, eigvec[i]) for i in 1:size(eigvec, 1)]
+
+    T_jac = vcat(hcat(diagm(eigval .- 1.0), Atdvdlam),
+        hcat(ΔuAt', Δλ_scaled))
+
+    ci_arch = T_jac \ vcat(-Atx, 0.0)
+
+    ci = ci_arch[1:end-1]
+    Δλ_loc = real.(ci_arch[end])
+    ci_mu = ci .* (eigval)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
 
-    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
-    return fix_v
+    fix_v = real.(v0 + mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu)))
+
+
+    return fix_v::T, Δλ_loc::Tlam
 end
 
 
@@ -324,10 +339,10 @@ function Constratint_find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigva
     #### 
     #### # println("------------------------------------")
     #### # println(AtA)
-     Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
     #### ci = AtA \ Atx
 
-    ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
+    ci = Atx #TODO: ez ugyan azt adja Schur esetén!!!
     ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
     #A=transpose(mapreduce(permutedims, vcat, eigvec))
     #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
