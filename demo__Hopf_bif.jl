@@ -9,7 +9,7 @@ using Plots
 theme(:dark)#:vibrant:dracula:rose_pine
 plotly()
 #const PLOTS_DEFAULTS = Dict(:theme => :wong, :fontfamily => "Computer Modern", :label => nothing, :dpi => 600 )const PLOTS_DEFAULTS = Dict(:theme => :wong, :fontfamily => "Computer Modern", :label => nothing, :dpi => 600 )
-default(size=(600, 600), titlefont=(15, "times"), legendfontsize=13, guidefont=(12, :white), tickfont=(12, :orange), guide="x", framestyle=:zerolines, yminorgrid=true, fontfamily="Computer Modern", label=nothing, dpi=600)
+default(size=(900, 900), titlefont=(15, "times"), legendfontsize=13, guidefont=(12, :white), tickfont=(12, :orange), guide="x", framestyle=:zerolines, yminorgrid=true, fontfamily="Computer Modern", label=nothing, dpi=600)
 
 #using Profile
 using StaticArrays
@@ -27,7 +27,8 @@ using Suppressor
 using FileIO
 # Governing equation
 
-normpower = 2#Inf
+normpower = Inf
+#normpower = 2
 
 function DelayedNonlineOscill(u, h, p, t)
     # Parameters
@@ -93,7 +94,7 @@ plot!(sol_period[1, :], sol_period[2, :])
 ## ---------------- simulation max amplitude ----------------------
 ## parameters
 
-bv = [LinRange(-2.0, 0.0, 100)..., LinRange(0.03, 0.05, 100)..., LinRange(0.06, 2.05, 100)...]
+bv = [LinRange(-1.95, 0.0, 100)..., LinRange(0.03, 0.05, 100)..., LinRange(0.06, 2.009, 100)...]
 norm_solperiod = similar(bv)
 @time Threads.@threads for ib in eachindex(bv)
     println(ib)
@@ -142,7 +143,7 @@ dp_0_Tfix = dynamic_problemSampled(prob_long, Solver_args, τmax,
     Krylov_arg=Krylov_arg)
 
 
-bv_affine = [LinRange(-2.0, 1.95, 100)..., LinRange(1.99, 2.05, 100)...]
+bv_affine = [LinRange(-1.95, 1.95, 100)..., LinRange(1.99, 2.009, 100)...]
 bv_affine = bv
 λ_μ₀ = Any[similar(bv_affine)...]
 
@@ -207,7 +208,7 @@ dp_0_cb = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
 
 # ----------- brute force naive continuation ----------------
 
-bv_affine_H = [LinRange(0.1, 1.95, 50)..., LinRange(1.96, 2.01, 30)...]
+bv_affine_H = [LinRange(0.1, 1.95, 50)..., LinRange(1.96, 2.009, 30)...]
 
 λ_μ₀_Hopf = Any[similar(bv_affine_H)...]
 Amp_H = Any[similar(bv_affine_H)...]
@@ -318,7 +319,7 @@ a0_fix = s0_shur
 plot!(dp_0_cb.StateSmaplingTime, getindex.(a0_fix, 1), xlim=(-7, 5))
 plot!(dp_0_cb.StateSmaplingTime, getindex.(a0_fix, 2), xlim=(-7, 5))
 norm(a0_fix, normpower)
-mus, a0_fix, sol_fix, p_fix, Niteration, normerror = affine(dp_0_cb, a0_fix; p=[ζ, δ, bHopf, τ, μ], pDual_dir=pDual_direction, Δu=s0_shur, Δλ_scaled=0.01, norm_limit=1e-3)
+mus, a0_fix, sol_fix, p_fix, Niteration, normerror = affine(dp_0_cb, 0.5 .* a0_fix; p=[ζ, δ, bHopf, τ, μ], pDual_dir=pDual_direction, Δu=s0_shur, Δλ_scaled=0.01, norm_limit=1e-3)
 
 #mu, a0_fix, sol0 = affine(dp_0_cb,s0_shur; p=[ζ, δ, bHopf, τ, μ]) #nem lehet direktben használni, mert épp a szinuláris pontot néznénk
 norm(a0_fix, normpower)
@@ -340,10 +341,14 @@ plot!(dp_0_cb.StateSmaplingTime, getindex.(a0_fix, 2), xlim=(-7, 5))
 @show p_fix
 
 scatter!(fig_bif, [bHopf], [0.0], markersize=6)
-scatter!(fig_bif, [p_fix[3]], [norm(a0_fix, normpower)], markersize=6, m=:cross)
+scatter!(fig_bif, [p_fix[3]], [norm(a0_fix, normpower)], markersize=6)#, m=:cross
 
-
-
+for mmpow in 0.1:0.1:5.0
+    #mus, a0_fix, sol_fix, p_fix, Niteration, normerror = affine(dp_0_cb, mmpow .* s0_shur; p=[ζ, δ, bHopf, τ, μ], pDual_dir=pDual_direction, Δu=s0_shur, Δλ_scaled=0.01, norm_limit=1e-3)
+    mus, a0_fix, sol_fix, p_fix, Niteration, normerror = affine(dp_0_cb, mmpow .* s0_shur; p=[ζ, δ, bHopf, τ, μ])
+    mu, saff, sol0 = affine(dp_0_cb, ustart; p=[ζ, δ, bloc, τ, μ])
+    scatter!(fig_bif, [p_fix[3]], [norm(a0_fix, normpower)], markersize=2, m=:cross)#
+end
 scatter!(fig_bif)
 
 p_start = (ζ, δ, bHopf, τ, μ)
@@ -353,39 +358,15 @@ p = p_fix
 s0 = a0_fix
 # ~~~~~~~~~~~~~~~~~ Pseudo-archlength method ~~~~~~~~~~~~~~~~~~~~~~~
 
-# # # @warn "ami ki van kommentelve azzal fut, de az újjal nem"
-# # #  b_H_start = 0.2#bHopf#0.2
-# # #  λ_start = b_H_start
-# # #  p = (ζ, δ, b_H_start, τ, μ)
-# # #  p_start = p
-# # #  #initialization of a step:
-# # #  
-# # #  
-# # #  mu_c, s0_start, sol0_c = affine(dp_0_cb; p=p_start);
-# # #  
-# # # Δλ = 0.03#05
-# # # #Δλ = 0.005
-# # # #Δλ = 0.05 
-# # # 
-# # # 
-# # #  p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
-# # #  mu_c, s0, sol0_c = affine(dp_0_cb, s0_start;p=p);
-# # # 
-# # # 
-# # # 
-# # # scatter!(fig_bif, [p_start[3]], [norm(s0_start, normpower)], markersize=4, m=:cross)
-# # # scatter!(fig_bif, [p[3]], [norm(s0, normpower)], markersize=4, m=:cross)
-# # # plot!(ylim=(-1.5,20),xlim=(-2,2))
-# # # plot!(xlim=(-0.01,0.06),ylim=(-0.02,0.1))
-# # # 
 function branch_plot(branch, dp, λdirection)
-    
-fig_normerror = scatter(yaxis=:log)
-fig_abs_mus = scatter(yaxis=:log)
-fig_path = plot()
 
-    fig_bif=scatter([b[4][3] for b in branch], [norm(b[2], normpower) for b in branch], markersize=3, m=:cross)
-    plot!(ylim=(-1.5, 20), xlim=(-2, 2.5))
+    fig_normerror = scatter(yaxis=:log)
+    fig_abs_mus = scatter(yaxis=:log)
+    fig_path = plot()
+global fig_bif
+    #fig_bif = scatter([b[4][3] for b in branch], [norm(b[2], normpower) for b in branch], markersize=5, m=:cross)
+    fig_bif = scatter!(fig_bif,[b[4][3] for b in branch], [norm(b[2], normpower) for b in branch], markersize=5, m=:cross)
+    plot!(ylim=(-1.5, 2), xlim=(-2, 2.5))
     # mus, s0, sol=affine(dp, s0; p=p);
     for b in branch
         λ_loc = sum(b[4] .* λdirection)
@@ -417,7 +398,8 @@ function one_step_conti!(branch, dp, λdirection)
     #Δλ = branch[end][4]' * λdirection - branch[end-1][4]' * λdirection
     @show Δλ = sum(branch[end][4] .* λdirection) - sum(branch[end-1][4] .* λdirection)#valid for tuples too
 
-    @show Niteration
+    @show Niteration =branch[end][5]
+    @show normerror =branch[end][6]
     @show lamscale = 1.3 .^ (iteration_goal .- Niteration)
     lamscale = minimum([lamscale, 1.5])
     @show lamscale = (Δλ * lamscale) > maxΔλ ? 1.0 : lamscale
@@ -435,34 +417,112 @@ function one_step_conti!(branch, dp, λdirection)
 end
 
 
-b_H_start = 0.2#bHopf#0.2
+# # # # b_H_start = 0.2#bHopf#0.2
+# # # # b_H_start = bHopf#0.2
+# # # # 
+# # # # λdirection = [0.0, 0.0, 1.0, 0.0, 0.0]
+# # # # Δλ = 0.03#05
+# # # # branch = Any[]
+# # # # push!(branch, affine(dp_0_cb; p=[ζ, δ, b_H_start, τ, μ]));
+# # # # mu_start = branch[end][1]
+# # # # s0_shur = mu_start[2][1] * 0.03# scaling is necessary, because the it hase unit norm
+# # # # norm(s0_shur)
+# # # # push!(branch, affine(dp_0_cb, s0_shur; p=branch[end][4] .+ λdirection * Δλ));
+# # # # 
+# # # # branch_plot(branch, dp_0_cb, λdirection)
+# # # # 
 
-λdirection = [0.0, 0.0, 1.0, 0.0, 0.0]
-Δλ = 0.03#05
+
+
+@warn "ami ki van kommentelve azzal fut, de az újjal nem"
+
 branch = Any[]
-push!(branch, affine(dp_0_cb; p=[ζ, δ, b_H_start, τ, μ]));
-push!(branch, affine(dp_0_cb; p=branch[end][4] .+ λdirection * Δλ));
+
+b_H_start = 0.2#bHopf#0.2
+λ_start = b_H_start
+p = (ζ, δ, b_H_start, τ, μ)
+p_start = p
+#initialization of a step:
+
+
+push!(branch, affine(dp_0_cb; p=p_start));
+Δλ = 0.03
+
+p = p .+ λdirection .* Δλ
+s0_start=branch[1][2]
+ push!(branch, affine(dp_0_cb, s0_start;p=p));
+ 
 
 branch_plot(branch, dp_0_cb, λdirection)
-
 
 ##
 #using JLD2
 #@save "bifurcation_till_Fold_point.jld2" 
 #@load "bifurcation_till_Fold_point.jld2"
 norm_limit = 1e-3
-iteration_goal = 5
+iteration_goal = 4
 Niteration = iteration_goal
 maxΔλ = 0.2
 λscale = 10.0
 lamscale = 1.0
 Nconti = 1
 
-@suppress_err for Nconti in 1:45#(5*340)#34
-one_step_conti!(branch, dp_0_cb,λdirection);
-branch_plot(branch, dp_0_cb, λdirection)
+@suppress_err for Nconti in 1:50#(5*340)#34
+    one_step_conti!(branch, dp_0_cb, λdirection)
+    branch_plot(branch, dp_0_cb, λdirection)
 end
-plot!(fig_bif,bv, norm_solperiod)
+branch_plot(branch, dp_0_cb, λdirection)
+
+
+
+one_step_conti!(branch, dp_0_cb, λdirection)
+branch_plot(branch, dp_0_cb, λdirection)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ b_H_start = 0.2#bHopf#0.2
+ λ_start = b_H_start
+ p = (ζ, δ, b_H_start, τ, μ)
+ p_start = p
+ #initialization of a step:
+ 
+ 
+ mu_c, s0_start, sol0_c = affine(dp_0_cb; p=p_start);
+ 
+Δλ = 0.03#05
+#Δλ = 0.005
+#Δλ = 0.05 
+
+
+ p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
+ mu_c, s0, sol0_c = affine(dp_0_cb, s0_start;p=p);
+
+
+
+scatter!(fig_bif, [p_start[3]], [norm(s0_start, normpower)], markersize=3, m=:cross)
+scatter!(fig_bif, [p[3]], [norm(s0, normpower)], markersize=3, m=:cross)
+plot!(ylim=(-1.5,1),xlim=(-2,2.2))
+#plot!(xlim=(-0.01,0.06),ylim=(-0.02,0.1))
+
+
 
 
 
@@ -470,7 +530,7 @@ plot!(fig_bif,bv, norm_solperiod)
     λscale = 10.0
     lamscale = 1.0
     Nconti = 1
-    for Nconti in 1:15#(5*340)#34
+    for Nconti in 1:80#(5*340)#34
         println("---------------------------")
         @show Nconti
         Δu = s0 - s0_start
