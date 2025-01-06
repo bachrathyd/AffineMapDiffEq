@@ -28,7 +28,6 @@ function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
     xrand = rand(typeof(x), N)
 end
 
-
 function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p)[1], size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
@@ -61,9 +60,6 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.Problem.p)
         return Float64(maximum(abs.(affine(dp; p=p)[1][1])))::Float64
     end
 end
-
-
-
 
 function partialpart(xSA)#::SVector)
     bb = [x.partials[1] for x in xSA]
@@ -134,15 +130,14 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
         #println("Fix point calculation ---------- Start")
         #TODO: it might be better to incluse the mus calcluations here too
         for k_fix_iteration in 1:30  #TODO:use input parameters for this with default value
-
             Niteration += 1
-            # println("find_fix_pont_start")
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
             a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T#TODO: kell a real?
             p = p .+ pDual_dir .* Δλ_loc
             # println("find_fix_pont_end")
             normerror = norm(s0 - v0)
+            println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
             if (normerror) < norm_limit #TODO:use input parameters for this with default value
                 #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
                 #  println("Fix point calculation ---------- End")
@@ -282,13 +277,13 @@ function find_fix_pont(s0::T, v0::T, eigval, eigvec) where {T}
     x = (v0 - s0)
 
     ##AtA = conj( eigvec' .* eigvec)
-    #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
+    #   AtA = [eigvec[i]' * eigvec[j] for i in eachindex(eigvec, 1), j in eachindex(eigvec, 1)]
+    #   Atx = [eigvec[i]' * x for i in eachindex(eigvec, 1)]
+    AtA = [dot(eigvec[i], eigvec[j]) for i in 1:eachindex(eigvec), j in eachindex(eigvec)]
 
     # println("------------------------------------")
     # println(AtA)
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    Atx = [dot(eigvec[i], x) for i in eachindex(eigvec)]
     ci = AtA \ Atx
 
     #ci =  Atx #TODO: ez ugyan azt adja Schur esetén!!!
@@ -303,11 +298,11 @@ end
 function find_fix_pont(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::Tlam) where {T,Tlam}
     x = (v0 - s0)
 
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
+    Atx = [dot(eigvec[i], x) for i in eachindex(eigvec)]
 
-    Atdvdlam = [dot(eigvec[i], dv0dλ) for i in 1:size(eigvec, 1)]
+    Atdvdlam = [dot(eigvec[i], dv0dλ) for i in eachindex(eigvec)]
 
-    ΔuAt = [dot(Δu, eigvec[i]) for i in 1:size(eigvec, 1)]
+    ΔuAt = [dot(Δu, eigvec[i]) for i in eachindex(eigvec)]
 
     T_jac = vcat(hcat(diagm(eigval .- 1.0), Atdvdlam),
         hcat(ΔuAt', Δλ_scaled))
@@ -324,31 +319,6 @@ function find_fix_pont(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::T
 
 
     return fix_v::T, Δλ_loc::Tlam
-end
-
-
-
-#function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval::AbstractVector,eigvec::Vector{<:AbstractVector})
-function Constratint_find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
-    x = (v0 - s0)
-
-    #### ##AtA = conj( eigvec' .* eigvec)
-    #### #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    #### AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### 
-    #### # println("------------------------------------")
-    #### # println(AtA)
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
-    #### ci = AtA \ Atx
-
-    ci = Atx #TODO: ez ugyan azt adja Schur esetén!!!
-    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
-    #A=transpose(mapreduce(permutedims, vcat, eigvec))
-    #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
-
-    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
-    return fix_v
 end
 
 
@@ -372,8 +342,8 @@ function issi_eigen(dp::dynamic_problemSampled; p=dp.Problem.p)
     for _ in 1:12
         #V = [LinMap(dp, Si; p=p)[1] for Si in S]
         V = [LinMap(dp, Si + s0; p=p)[1] - v0 for Si in S] #TODO: ez nem jó, mert
-        StS = [S[i]' * S[j] for i in 1:size(S, 1), j in 1:size(S, 1)]
-        StV = [S[i]' * V[j] for i in 1:size(S, 1), j in 1:size(S, 1)]
+        StS = [S[i]' * S[j] for i in eachindex(S, 1), j in eachindex(S, 1)]
+        StV = [S[i]' * V[j] for i in eachindex(S, 1), j in eachindex(S, 1)]
         H = StS \ StV
 
         FShurr = schur(H)

@@ -131,9 +131,9 @@ b=0.05 # delay parameter, Note: b=0 provide the traditional stability chart of t
 Aaff = zeros(size(ϵv, 1), size(δv, 1))
 Spek_aff = zeros(size(ϵv, 1), size(δv, 1))
 
-@time Threads.@threads  for j in 1:size(δv, 1)
+@time Threads.@threads  for j in eachindex(δv)
     @inbounds δ = δv[j]
-    Threads.@threads     for i in 1:size(ϵv, 1)
+    Threads.@threads     for i in 1:eachindex(ϵv)
         @inbounds ϵ = ϵv[i]
         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
@@ -195,9 +195,9 @@ bv = -1.501:0.05:1.5 # initial grid in y direction
 Aaff = zeros(size(bv, 1), size(δv, 1))
 Spek_aff = zeros(size(bv, 1), size(δv, 1))
 
-@time Threads.@threads  for j in 1:size(δv, 1)
+@time Threads.@threads  for j in eachindex(δv)
     @inbounds δ = δv[j]
-    Threads.@threads     for i in 1:size(bv, 1)
+    Threads.@threads     for i in eachindex(bv)
         @inbounds b = bv[i]
         muaff, s0aff, sol0 = affine(dpMathieu; p=(ζ, δ, ϵ, b, τ, T))
         Aaff[i, j] = norm(getindex.(s0aff, 1)) # norm of the motion
