@@ -1,10 +1,11 @@
 #Demo: Delayed Nonline Oscill with nonlinearity
 5 + 5
 
+
 using Revise
 using DDE_mapping
 
-using BenchmarkTools
+#using BenchmarkTools
 using Plots
 theme(:dark)#:vibrant:dracula:rose_pine
 plotly()
@@ -35,7 +36,7 @@ function DelayedNonlineOscill(u, h, p, t)
     ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^3 + μ * u[2]^5
     #ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^2*sign(u[2])
     # Update the derivative vector
-    SA[dx, ddx]
+    @MArray [dx, ddx]
 end
 
 Base.:+(a::SVector, b::Bool) = a .+ b
@@ -46,6 +47,8 @@ b = -2.8#stable per.orbit
 b = -3.15#unstable per.orbit
 b = -1#Hopf starting...
 b = 0.1#Hopf starting...
+#Hopf starting...
+b = 0.0354#Hopf starting...0.035272963112167
 τ = 2pi#0.5#2pi          # Time delay
 μ = 5.0
 p = ζ, δ, b, τ, μ
@@ -53,9 +56,9 @@ p = ζ, δ, b, τ, μ
 
 # test simulation ---------------
 #initial condition
-u0 = SA[0.001, 0.0]
+u0 = @MArray [0.001, 0.0]
 #history function
-h(p, t) = SA[0.0; 0.0]
+h(p, t) = @MArray [0.0; 0.0]
 
 Tlongsim = 5000.2
 Tend = 27.0
@@ -89,7 +92,7 @@ plot!(sol_period[1, :], sol_period[2, :])
 ## ---------------- simulation max amplitude ----------------------
 ## parameters
 
-bv = [LinRange(-2.0, 1.95, 30)..., LinRange(1.99, 2.05, 30)...]
+bv = [LinRange(-2.0, 0.0, 100)...,LinRange(0.001, 0.1, 100)..., LinRange(0.21, 2.05, 100)...]
 norm_solperiod = similar(bv)
 @time Threads.@threads for ib in eachindex(bv)
     println(ib)
@@ -105,11 +108,10 @@ norm_solperiod = similar(bv)
     t_select_delay = eriod = 0.0:0.01:τ
     sol_period = sol(sol.t[end] .- t_select_period)
     sol_delay = sol(sol.t[end] .- t_select_delay)
-    norm_solperiod[ib] = maximum(abs.(getindex.(sol_period.u, 1)))
+    norm_solperiod[ib] = norm(sol_period.u, Inf)
 end
 
 plot(bv, norm_solperiod)
-scatter!(bv, norm_solperiod)
 ##
 #sol = solve(remake(prob_long, p=(ζ, δ, 2.010, τ, μ)); Solver_args...)#abstol,reltol
 #plot(sol)
@@ -138,10 +140,9 @@ dp_0_Tfix = dynamic_problemSampled(prob_long, Solver_args, τmax,
     zerofixpont=true, affineinteration=0,
     Krylov_arg=Krylov_arg)
 
-#bv_affine = LinRange(-2.0, 2.05, 201)#TODO: ez kell ha a balolbali szakaszt szeretném követeni
-#bv_affine = LinRange(2.05, -2.0, 201)
 
-bv_affine = [LinRange(-2.0, 1.95, 30)..., LinRange(1.99, 2.05, 30)...]
+bv_affine = [LinRange(-2.0, 1.95, 100)..., LinRange(1.99, 2.05, 100)...]
+bv_affine=bv
 λ_μ₀ = Any[similar(bv_affine)...]
 
 @time Threads.@threads for ib in eachindex(bv_affine)
@@ -152,7 +153,7 @@ bv_affine = [LinRange(-2.0, 1.95, 30)..., LinRange(1.99, 2.05, 30)...]
 
 end
 
-plot(bv, norm_solperiod)
+plot(bv, norm_solperiod,ylim=(-0.8,1.0))
 #scatter()
 for k in 1:Neig
     plot!(bv_affine, getindex.(λ_μ₀, k))
@@ -170,7 +171,7 @@ function condition(u, t, integrator) # Event when condition(u,t,integrator) == 0
     u[2]
 end
 function affect_short!(integrator)
-    if integrator.t > 0.1
+    if integrator.t > 0.02
         terminate!(integrator)
     end
 end
@@ -186,9 +187,9 @@ Base.:convert(::Type{Float64}, x::ForwardDiff.Dual{Float64,Float64,1}) = x.value
 using KrylovKit
 Neig = 8#number of required eigen values
 Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-35, krylovdim=3 + 35, verbosity=0, eager=true));
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-20, krylovdim=22, verbosity=0, eager=true));
 #Creating the problem
 Timeperiod = 20.0;#Tend
-
 
 
 τmax = τ #maximal timedelay in the mapping
@@ -203,72 +204,26 @@ dp_0_cb = dynamic_problemSampled(prob_long, Solver_args_T_short, τmax,
 
 
 
-
-
-#------------------ initalization in a critical point --------------------------
-bcrit = bv_affine[findfirst(x -> x < 0, getindex.(λ_μ₀, 1))]
-b_H_start = 0.1;#-1.0#bcrit - 0.05;
-
-mu_c, saff_c, sol0_c = affine(dp_0_Tfix; p=(ζ, δ, bcrit, τ, μ));
-mu_c[1]
-T = mu_c[3]
-As = mu_c[2]
-Acrit = mu_c[2][1]
-
-
-
-
-plot(sol_delay[1, :], sol_delay[2, :])
-plot!(sol_period[1, :], sol_period[2, :])
-plot!(getindex.(Acrit, 1), getindex.(Acrit, 2), lw=1)
-#plot!(dp_0_Tfix.StateSmaplingTime, getindex.(Acrit,1),lw=2)
-#plot!(dp_0_Tfix.StateSmaplingTime, getindex.(Acrit,2),lw=2)
-
-Acrtit_cb = LinMap(dp_0_cb, Acrit; p=(ζ, δ, b_H_start, τ, μ))[1]
-plot!(getindex.(Acrtit_cb, 1), getindex.(Acrtit_cb, 2), lw=2)
-
-
-
-
-
-mu_c, saff_c, sol0_c = affine(dp_0_cb, Acrtit_cb * 10.0; p=(ζ, δ, b_H_start, τ, μ));
-scatter!(getindex.(saff_c, 1), getindex.(saff_c, 2), lw=2)
-scatter!(sol0_c[1, :], sol0_c[2, :])
-
-
 # ----------- brute force naive continuation ----------------
 
-#ustart = rand(typeof(dp_0_cb.Problem.u0), Nstep)
-#ustart = ustart .* 0.0 .+ 1.5
-ustart = saff_c
-#bv_affine_H = LinRange(-2.0, -0.951233, 27)
-#bv_affine_H = LinRange(-1.0, -4.0, 37)
-#bv_affine_H = LinRange(1.2, 0.08, 27)
-bv_affine_H = LinRange(b_H_start, -2.0, 150)
-bv_affine_H = [LinRange(b_H_start, -1.8, 10)..., LinRange(-1.81, -1.96, 40)..., LinRange(-1.96, -1.98, 100)...]
-
-bv_affine_H = [LinRange(b_H_start, 2, 100)...]
-bv_affine_H = [b_H_start:0.01:2.0...]
-
-bv_affine_H = [LinRange(b_H_start, 1.95, 30)..., LinRange(1.96, 2.01, 30)...]
+bv_affine_H = [LinRange(0.1, 1.95, 50)..., LinRange(1.96, 2.01, 30)...]
 
 λ_μ₀_Hopf = Any[similar(bv_affine_H)...]
 Amp_H = Any[similar(bv_affine_H)...]
 T_period_H = Any[similar(bv_affine_H)...]
-#
-#plot()
-#Threads.@threads
 
+mu, ustart, sol0 = affine(dp_0_cb; p=(ζ, δ, bv_affine_H[1], τ, μ))
 @suppress_err begin
     @time for ib in eachindex(bv_affine_H)
         println(ib)
-        @show bloc = deepcopy(bv_affine_H[ib])
+        bloc = deepcopy(bv_affine_H[ib])
         mu, saff, sol0 = affine(dp_0_cb, ustart; p=(ζ, δ, bloc, τ, μ))
         #mu, saff, sol0 = affine(dp_Hopf_callback; p=(ζ, δ, bloc, τ, μ))
         λ_μ₀_Hopf[ib] = log.(abs.(mu[1])) / sol0.t[end]
         #Amp[ib] = saff
         T_period_H[ib] = sol0.t[end]
-        Amp_H[ib] = maximum(abs.(getindex.(saff, 1)))
+        #Amp_H[ib] = maximum(abs.(getindex.(saff, 2)))
+        Amp_H[ib] = norm(saff, Inf)
 
         ustart = saff #TODO: enélkül nem áll be szépen (de csak azért nem csinálta, mert affineinteration nem érvényesült)
 
@@ -280,15 +235,13 @@ T_period_H = Any[similar(bv_affine_H)...]
     end
 end
 #plot!(legend=false)
-
 ##--------
-plot(bv, norm_solperiod)
+plot(bv, norm_solperiod,ylim=(-0.8,1.0))
 marcolor = sign.(getindex.(λ_μ₀_Hopf, 1))
 #, color=:bamako
 #scatter!(bv_affine_H, Amp_H, zcolor=marcolor, lw=0, markerstrokewidth=0)
 scatter!(bv_affine_H, Amp_H, lw=0, markerstrokewidth=0)
 plot!(legend=false)
-plot!(ylim=(-0.3, 1000.0))
 plot!(ylim=())
 
 
@@ -300,42 +253,128 @@ for k in 1:Neig
     #end
 end
 plot!()
-plot!(ylim=(-0.5, 1.0))
+plot!(ylim=(-0.8, 2.0))
 
 fig_bif = plot!(bv_affine_H, T_period_H ./ 10.0, lw=3)
 
 
 # ------------------------------------------------------------------------------
 # TODO: csak itt tartok -  tesztelgetés
+# már egész jól működik, de sok a hard-coded rész
+# TODO:az indítást meg kellene csinlni megfelelő bifurkácóis pontból indítással
+# TODO: és kapcsolódó két sajátvektort úgy kombinálni, hogy kilégítse a a periodikus pályához tartozó Poin-carré metszet-nek megadott függvényt.
+# TODO: istabil Hopf pálya indítás teszt
+# TODO: tesztelni, különféle diffegyenelteke, esztergálás autós,...tesztelni, peridódikus pálya bifukációját (késleltetett rezonancia görge), Duffin cucc egyenletet ... duffing-chain?!?
+# TODO: tesztelni a verziószámokat
+##
+
+@warn "Itt tartok! - valahogy el kellene tudni indítani a Hopf pontból merőlegesen, de valamiért nem megy..."
+#------------------ initalization in a critical point --------------------------
+using NonlinearSolve
+#Finding the Hopf points:
+foo_Hopf(b_NL_test,p_dumy)=abs(affine(dp_0_Tfix; p=(ζ, δ, b_NL_test, τ, μ))[1][1][1])-1
+prob = IntervalNonlinearProblem(foo_Hopf,[0.0,0.2])
+#prob = NonlinearProblem(foo_Hopf, 0.2)
+bHopf = solve(prob,abstol=1e-6,maxiters=100).u
+
+
+#bHopf=0.03527
+
+mu, saff, sol0 = affine(dp_0_Tfix; p=(ζ, δ, bHopf, τ, μ))
+@show lams=log.((mu[1])) / sol0.t[end] # predicting Hopf point based on the comlex conjugater pair of critical eigenvalue
+
+
+#The corresponding eigen value are correct and the lengts is proper [-τ,0], but the phase condition is not fullfilled
+#but with a single mapping with the solution with the pahse condition simulete it as long as to create a proper phase
+s0_shur=mu[2][1]*0.03# scaling is necessary, because the it hase unit norm
+#s0_shur=mu[2][1]*0.08# scaling is necessary, because the it hase unit norm
+norm(s0_shur)
+norm(s0_shur,Inf)
+v0_shur, sol = LinMap(dp_0_cb, s0_shur; p=(ζ, δ, bHopf, τ, μ))
+
+
+plot(dp_0_cb.StateSmaplingTime,getindex.(s0_shur, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(s0_shur, 2),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(v0_shur, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(v0_shur, 2),xlim=(-7,5))
+
+#now it is mapped to istself (approximately), so it is a good initial guess
+norm(v0_shur .- LinMap(dp_0_cb, v0_shur; p=(ζ, δ, bHopf, τ, μ))[1])/norm(v0_shur)
+s0_shur=v0_shur
+v0_shur, sol = LinMap(dp_0_cb, s0_shur; p=(ζ, δ, bHopf, τ, μ))
+
+
+
+plot()
+pDual_direction=(0.0, 0.0, 1.0 , 0.0, 0.0)
+a0_fix=s0_shur
+
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 2),xlim=(-7,5))
+norm(a0_fix, Inf)
+mus, a0_fix, sol_fix, p_fix,Niteration,normerror=affine(dp_0_cb, a0_fix ; p=(ζ, δ, bHopf, τ, μ), pDual_dir=pDual_direction, Δu=s0_shur,Δλ_scaled=0.0,norm_limit = 1e-3) 
+
+#mu, a0_fix, sol0 = affine(dp_0_cb,s0_shur; p=(ζ, δ, bHopf, τ, μ)) #nem lehet direktben használni, mert épp a szinuláris pontot néznénk
+norm(a0_fix, Inf)
+
+abs.(mus[1])
+
+plot!(sol_fix)
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 2),xlim=(-7,5))
+
+a0_fix=LinMap(dp_0_cb, a0_fix; p=(ζ, δ, bHopf, τ, μ))[1]
+norm(a0_fix, Inf)
+
+#plot(sol_fix)
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(a0_fix, 2),xlim=(-7,5))
+
+
+@show p_fix
+
+scatter!(fig_bif, [bHopf], [0.0], markersize=6)
+scatter!(fig_bif, [p_fix[3]], [norm(a0_fix, Inf)], markersize=6, m=:cross)
+
+
+
+scatter!(fig_bif)
+
+p_start=(ζ, δ, bHopf, τ, μ)
+λ_start=p_start[3]
+s0_start=a0_fix .* 0.0
+p=p_fix
+s0=a0_fix
+# ~~~~~~~~~~~~~~~~~ Pseudo-archlength method ~~~~~~~~~~~~~~~~~~~~~~~
+
 fig_normerror = scatter(yaxis=:log)
 fig_abs_mus = scatter(yaxis=:log)
 fig_path = plot()
-# Pseudo-archlength method
-5 + 5
-b_H_start = 0.2
-λ_start = b_H_start
-p = (ζ, δ, b_H_start, τ, μ)
-p_start = p
-#initialization of a step:
 
+@warn "ami ki van kommentelve azzal fut, de az újjal nem"
+# # # b_H_start = 0.2#bHopf#0.2
+# # # λ_start = b_H_start
+# # # p = (ζ, δ, b_H_start, τ, μ)
+# # # p_start = p
+# # # #initialization of a step:
+# # # 
+# # # 
+# # # mu_c, s0_start, sol0_c = affine(dp_0_cb; p=p_start);
+# # # #mu_c, s0_start, sol0_c = affine(dp_0_cb, s0_start; p=p_start);
+# # # 
+# # # 
+# # # Δλ = 0.03#05
+# # # #Δλ = 0.005
+# # # #Δλ = 0.05
+# # # p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
+# # # mu_c, s0, sol0_c = affine(dp_0_cb, s0_start;p=p);
+# # # mu_c, s0, sol0_c = affine(dp_0_cb, s0; p=p);
 
-mu_c, s0_start, sol0_c = affine(dp_0_cb, Acrtit_cb * 10.0; p=p_start);
-mu_c, s0_start, sol0_c = affine(dp_0_cb, s0_start; p=p_start);
-
-
-Δλ = 0.05#05
-#Δλ = 0.005
-#Δλ = 0.05
-p = p .+ (0.0, 0.0, Δλ, 0.0, 0.0)
-mu_c, s0, sol0_c = affine(dp_0_cb, s0_start; p=p);
-mu_c, s0, sol0_c = affine(dp_0_cb, s0; p=p);
-
-
-
-scatter!(fig_bif, [p_start[3]], [maximum(abs.(getindex.(s0_start, 1)))], markersize=4, m=:cross)
-scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=4, m=:cross)
-
-
+scatter!(fig_bif, [p_start[3]], [norm(s0_start, Inf)], markersize=4, m=:cross)
+scatter!(fig_bif, [p[3]], [norm(s0, Inf)], markersize=4, m=:cross)
+plot!(ylim=(-0.5,2),xlim=(-2,2))
+plot!(xlim=(-0.01,0.06),ylim=(-0.02,0.1))
+##
 #using JLD2
 #@save "bifurcation_till_Fold_point.jld2" 
 #@load "bifurcation_till_Fold_point.jld2"
@@ -349,7 +388,7 @@ maxΔλ=0.2
     λscale = 10.0
     lamscale = 1.0
     Nconti = 1
-    for Nconti in 1:40#(5*340)#34
+    for Nconti in 1:45#(5*340)#34
         println("---------------------------")
         @show Nconti
         Δu = s0 - s0_start
@@ -370,17 +409,22 @@ maxΔλ=0.2
         dp = dp_0_cb
         Nstep = size(dp.StateSmaplingTime, 1)
 
-        scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], markersize=3)
+        scatter!(fig_bif, [p[3]], [norm(s0, Inf)], markersize=3)
         scatter!(fig_bif, xlim=(0.09, 0.35), ylim=(0.05, 0.15))
+        plot!(ylim=(-0.5,2),xlim=(-2,2))
+        plot!(xlim=(-0.01,0.06),ylim=(-0.02,0.1))
        
         pDual_direction=(0.0, 0.0, 1.0 , 0.0, 0.0)
         
-        mus, s0, sol, p,Niteration,normerror=affine(dp, s0; p, pDual_dir=pDual_direction, Δu=Δu,Δλ_scaled=λscale*Δλ,norm_limit = 1e-3) ;
+        mus, s0, sol, p,Niteration,normerror=affine(dp, s0; p=p, pDual_dir=pDual_direction, Δu=Δu,Δλ_scaled=λscale*Δλ,norm_limit = 1e-3) ;
 
-        eigval = mus[1]
-        eigvec = mus[2]
         
-        scatter!(fig_bif, [p[3]], [maximum(abs.(getindex.(s0, 1)))], m=:cross, markersize=4)
+       # mus, s0, sol=affine(dp, s0; p=p);
+
+            eigval = mus[1]
+            eigvec = mus[2]
+
+        scatter!(fig_bif, [p[3]], [norm(s0, Inf)], m=:cross, markersize=4)
         scatter!(fig_abs_mus, p[3] .* ones(size(eigval)), abs.(eigval), markersize=3, m=:circle, yaxis=:log,xlabel="λ",ylabel="asb_mu")
         
         
@@ -400,6 +444,6 @@ end
 # @load "bifurcation_till_Fold_point.jld2"
 
 
-scatter!(fig_bif, xlim=(0.00, 2.3), ylim=(0.00, 0.8))
+scatter!(fig_bif, xlim=(0.00, 2.3), ylim=(0.00, 1.0))
 scatter!(fig_normerror, xlim=(0.00, 2.3))
 out = plot(fig_bif, fig_normerror, fig_abs_mus,fig_path,layout=(2, 2),size=(900, 600))

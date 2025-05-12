@@ -44,7 +44,7 @@ Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1
 solVdP = solve(probVdP, Tsit5())  # Using Tsitouras 5/4 Runge-Kutta method
 
 solVdP = solve(probVdP; Solver_args...)#abstol,reltol
-plot(sol)
+#plot(sol)
 using Plots
 plot(solVdP, vars=(1, 2), title="Van der Pol Oscillator Phase Portrait", xlabel="x1", ylabel="x2")
 

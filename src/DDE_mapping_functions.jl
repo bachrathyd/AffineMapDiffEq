@@ -8,6 +8,7 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
+    @warn "TODO: T period is not used, problem timespan is used as period"
     dynamic_problemSampled(prob, alg, maxdelay, Tperiod, zerofixpont, affineinteration,
         StateSmaplingTime, Krylov_arg)
 end
@@ -27,7 +28,6 @@ end
 function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
     xrand = rand(typeof(x), N)
 end
-
 
 function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p)[1], size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
@@ -62,20 +62,17 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.Problem.p)
     end
 end
 
-
-
-
 function partialpart(xSA)#::SVector)
     bb = [x.partials[1] for x in xSA]
-    return SA[bb...]
-    #return MVector(bb...);
+    #return SA[bb...]
+    return MVector(bb...);
 end
 
 
 function valuepart(xSA)#::SVector)
     bb = [x.value[1] for x in xSA]
-    return SA[bb...]
-    #return MVector(bb...);
+    #return SA[bb...]
+    return MVector(bb...);
 end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .* 0.0, Δu=s0 .* 0.0, Δλ_scaled=1.0, norm_limit=1e-10) where {T}
@@ -88,7 +85,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
     v0_dual = LinMap(dp, s0; p=p .+ one_espilon_Dual .* pDual_dir)[1]
     v0 = valuepart.(v0_dual)
     dv0dλ = partialpart.(v0_dual)
-
+@warn   " p change is commented for testing"   #  p = p .+ pDual_dir .* Δλ_loc
 
     Finished_itertaion = 0
     do_more_iteration = true
@@ -129,20 +126,19 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
 
         #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
         a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T
-        p = p .+ pDual_dir .* Δλ_loc
+      #  p = p .+ pDual_dir .* Δλ_loc
 
         #println("Fix point calculation ---------- Start")
         #TODO: it might be better to incluse the mus calcluations here too
         for k_fix_iteration in 1:30  #TODO:use input parameters for this with default value
-
             Niteration += 1
-            # println("find_fix_pont_start")
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
             a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T#TODO: kell a real?
-            p = p .+ pDual_dir .* Δλ_loc
+      #      p = p .+ pDual_dir .* Δλ_loc
             # println("find_fix_pont_end")
             normerror = norm(s0 - v0)
+           # println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
             if (normerror) < norm_limit #TODO:use input parameters for this with default value
                 #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
                 #  println("Fix point calculation ---------- End")
@@ -153,7 +149,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
         end
         v0 = LinMap(dp, s0; p=p)[1]
         a0, Δλ_loc = (find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu, Δλ_scaled))#::T#TODO: kell a real?
-        p = p .+ pDual_dir .* Δλ_loc
+   #     p = p .+ pDual_dir .* Δλ_loc
         # println("find_fix_pont_end")
         # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
 
@@ -237,7 +233,9 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T 
     #@show dp.Tperiod
     #@show hint(p, 0.0)
     #@show typeof(hint(p, 0.0))
-    sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+   # @warn "TODO: T period is not used, problem timespan is used as period"
+    sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+   # sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
     #@show sol.t[end]
 
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
@@ -324,31 +322,6 @@ function find_fix_pont(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::T
 
 
     return fix_v::T, Δλ_loc::Tlam
-end
-
-
-
-#function find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval::AbstractVector,eigvec::Vector{<:AbstractVector})
-function Constratint_find_fix_pont(s0::AbstractVector, v0::AbstractVector, eigval, eigvec)
-    x = (v0 - s0)
-
-    #### ##AtA = conj( eigvec' .* eigvec)
-    #### #   AtA = [eigvec[i]' * eigvec[j] for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### #   Atx = [eigvec[i]' * x for i in 1:size(eigvec, 1)]
-    #### AtA = [dot(eigvec[i], eigvec[j]) for i in 1:size(eigvec, 1), j in 1:size(eigvec, 1)]
-    #### 
-    #### # println("------------------------------------")
-    #### # println(AtA)
-    Atx = [dot(eigvec[i], x) for i in 1:size(eigvec, 1)]
-    #### ci = AtA \ Atx
-
-    ci = Atx #TODO: ez ugyan azt adja Schur esetén!!!
-    ci_mu = (ci .* ((eigval) ./ (eigval .- 1.0)))#TODO: Szabad ezt csinálni, a Schur-nál, nem a sajátértékkel kellenen skálázni... (vagy az pont kiesik valós függvényeknél???)
-    #A=transpose(mapreduce(permutedims, vcat, eigvec))
-    #fix_v = v0 - A * (((A'A) \ (A' * x)) .* ((eigval) ./ (eigval .- 1.0)))
-
-    fix_v = v0 - mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
-    return fix_v
 end
 
 
