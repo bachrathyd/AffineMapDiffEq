@@ -1,6 +1,6 @@
 
 
-struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
+mutable struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     Problem#::DDEProblem #e.g. =DDEProblem(....)
     alg#::Dict{Symbol, Any}               XXXX#::MethodOfSteps # e.g.: alg = MethodOfSteps(Tsit5())
     maxdelay#::Tfloat

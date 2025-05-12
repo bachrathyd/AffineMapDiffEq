@@ -26,7 +26,7 @@ function DelayMathieu(u, h, p, t)
     dx = u[2]
     ddx = -(δ + ϵ * cos(2pi * t / T)) * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] + F
     # Update the derivative vector
-    SA[dx, ddx]
+    @MArray[dx, ddx]
 end
 Base.:+(a::SVector, b::Bool) = a .+ b
 Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
@@ -44,14 +44,14 @@ p = ζ, δ, ϵ, b, τ, T
 
 # test simulation ---------------
 #initial condition
-u0 = SA[1.0, 0.0]
+u0 = @MArray [1.0, 0.0]
 #history function
-h(p, t) = SA[0.0; 0.0]
+h(p, t) = @MArray [0.0; 0.0]
 probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 1000.0), p; constant_lags=[τ])
 
 #Parameters for the solver as a Dict (it is necessary to collect it for later use)
 #Solver_args = Dict(:alg => MethodOfSteps(BS3()), :callback => cb, :adaptive => true, :dt => 0.01, :verbose => false, :reltol => 1e-9)#, save_everystep=false)#abstol,reltol)
-Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-4)#
+Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-8)#
 Solver_args = Dict()#
 sol = solve(probMathieu; Solver_args...)#abstol,reltol
 
@@ -76,7 +76,7 @@ plot!(getindex.(sol_period.u,1),getindex.(sol_period.u,2))
 # ---------------- Affine mapping ---------------------------
 using KrylovKit
 Neig=8#number of required eigen values
-Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-12,krylovdim=8+5,verbosity=0));
+Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-32,krylovdim=18+5,verbosity=0));
 
 τmax=τ #maximal timedelay in the mapping
 Nstep = 100 # discretization number of the mapping
@@ -85,7 +85,7 @@ Timeperiod=T # timeperiod of the mapping
 #Creating the problem
 dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
 Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false,    affineinteration=1,
+    zerofixpont=false,    affineinteration=8,
     Krylov_arg=Krylov_arg)
 
 

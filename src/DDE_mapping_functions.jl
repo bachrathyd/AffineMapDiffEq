@@ -8,6 +8,7 @@ function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
     #fixpont = Vector{typeof(prob.u0)}
     #{ComplexF64,Int64,Float64}
+    @warn "TODO: T period is not used, problem timespan is used as period"
     dynamic_problemSampled(prob, alg, maxdelay, Tperiod, zerofixpont, affineinteration,
         StateSmaplingTime, Krylov_arg)
 end
@@ -63,15 +64,15 @@ end
 
 function partialpart(xSA)#::SVector)
     bb = [x.partials[1] for x in xSA]
-    return SA[bb...]
-    #return MVector(bb...);
+    #return SA[bb...]
+    return MVector(bb...);
 end
 
 
 function valuepart(xSA)#::SVector)
     bb = [x.value[1] for x in xSA]
-    return SA[bb...]
-    #return MVector(bb...);
+    #return SA[bb...]
+    return MVector(bb...);
 end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .* 0.0, Δu=s0 .* 0.0, Δλ_scaled=1.0, norm_limit=1e-10) where {T}
@@ -84,7 +85,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
     v0_dual = LinMap(dp, s0; p=p .+ one_espilon_Dual .* pDual_dir)[1]
     v0 = valuepart.(v0_dual)
     dv0dλ = partialpart.(v0_dual)
-
+@warn   " p change is commented for testing"   #  p = p .+ pDual_dir .* Δλ_loc
 
     Finished_itertaion = 0
     do_more_iteration = true
@@ -125,7 +126,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
 
         #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
         a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T
-        p = p .+ pDual_dir .* Δλ_loc
+      #  p = p .+ pDual_dir .* Δλ_loc
 
         #println("Fix point calculation ---------- Start")
         #TODO: it might be better to incluse the mus calcluations here too
@@ -134,10 +135,10 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
             a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T#TODO: kell a real?
-            p = p .+ pDual_dir .* Δλ_loc
+      #      p = p .+ pDual_dir .* Δλ_loc
             # println("find_fix_pont_end")
             normerror = norm(s0 - v0)
-            println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
+           # println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
             if (normerror) < norm_limit #TODO:use input parameters for this with default value
                 #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
                 #  println("Fix point calculation ---------- End")
@@ -148,7 +149,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
         end
         v0 = LinMap(dp, s0; p=p)[1]
         a0, Δλ_loc = (find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu, Δλ_scaled))#::T#TODO: kell a real?
-        p = p .+ pDual_dir .* Δλ_loc
+   #     p = p .+ pDual_dir .* Δλ_loc
         # println("find_fix_pont_end")
         # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
 
@@ -232,7 +233,9 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T 
     #@show dp.Tperiod
     #@show hint(p, 0.0)
     #@show typeof(hint(p, 0.0))
-    sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+   # @warn "TODO: T period is not used, problem timespan is used as period"
+    sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+   # sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
     #@show sol.t[end]
 
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.

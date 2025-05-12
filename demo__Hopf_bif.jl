@@ -1,6 +1,7 @@
 #Demo: Delayed Nonline Oscill with nonlinearity
 5 + 5
 
+
 using Revise
 using DDE_mapping
 
@@ -38,7 +39,7 @@ function DelayedNonlineOscill(u, h, p, t)
     ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^3 + μ * u[2]^5
     #ddx = -δ * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] - μ * u[2]^2*sign(u[2])
     # Update the derivative vector
-    SA[dx, ddx]
+    @MArray [dx, ddx]
 end
 
 Base.:+(a::SVector, b::Bool) = a .+ b
@@ -58,9 +59,9 @@ p = [ζ, δ, b, τ, μ]
 
 # test simulation ---------------
 #initial condition
-u0 = SA[0.001, 0.0]
+u0 = @MArray [0.001, 0.0]
 #history function
-h(p, t) = SA[0.0; 0.0]
+h(p, t) = @MArray [0.0; 0.0]
 
 Tlongsim = 25000.2
 Tend = 27.0
@@ -444,6 +445,14 @@ p = (ζ, δ, b_H_start, τ, μ)
 p_start = p
 #initialization of a step:
 
+@warn "Itt tartok! - valahogy el kellene tudni indítani a Hopf pontból merőlegesen, de valamiért nem megy..."
+#------------------ initalization in a critical point --------------------------
+using NonlinearSolve
+#Finding the Hopf points:
+foo_Hopf(b_NL_test,p_dumy)=abs(affine(dp_0_Tfix; p=(ζ, δ, b_NL_test, τ, μ))[1][1][1])-1
+prob = IntervalNonlinearProblem(foo_Hopf,[0.0,0.2])
+#prob = NonlinearProblem(foo_Hopf, 0.2)
+bHopf = solve(prob,abstol=1e-6,maxiters=100).u
 
 push!(branch, affine(dp_0_cb; p=p_start));
 Δλ = 0.03
@@ -516,6 +525,10 @@ branch_plot(branch, dp_0_cb, λdirection)
  mu_c, s0, sol0_c = affine(dp_0_cb, s0_start;p=p);
 
 
+plot(dp_0_cb.StateSmaplingTime,getindex.(s0_shur, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(s0_shur, 2),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(v0_shur, 1),xlim=(-7,5))
+plot!(dp_0_cb.StateSmaplingTime,getindex.(v0_shur, 2),xlim=(-7,5))
 
 scatter!(fig_bif, [p_start[3]], [norm(s0_start, normpower)], markersize=3, m=:cross)
 scatter!(fig_bif, [p[3]], [norm(s0, normpower)], markersize=3, m=:cross)
