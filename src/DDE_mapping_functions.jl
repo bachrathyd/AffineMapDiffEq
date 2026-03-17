@@ -1,8 +1,11 @@
 function dynamic_problemSampled(prob, alg, maxdelay, Tperiod; Historyresolution=200,
     zerofixpont=true, affineinteration=1, Krylov_arg=())
     #dt=maxdelay / Historyresolution
-
-    StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO: Float64!!!
+    if Historyresolution == 1
+        StateSmaplingTime = [0.0]
+    else
+        StateSmaplingTime = LinRange(-maxdelay, 0.0, Historyresolution)#TODO:Float64!!!
+    end
     #eigs = zeros(ComplexF64, eigN)
     #eigsA = Vector{Vector{ComplexF64}}(undef,eigN)
     #eigsA = [zeros(ComplexF64, Historyresolution) for _ in 1:eigN]
@@ -23,17 +26,17 @@ end
 ##x=[1.0,2.0]
 ##srand=randsimilar(x,4)
 function randsimilar(x::AbstractArray, N::Int)::Vector{typeof(x)}
-    xrand = [randsimilar(xi, N) for xi in x]
+    [rand!(copy(x)) for _ in 1:N]
 end
-function randsimilar(x::SVector, N::Int)::Vector{typeof(x)}
-    xrand = rand(typeof(x), N)
+function randsimilar(x::StaticArray, N::Int)::Vector{typeof(x)}
+    rand(typeof(x), N)
 end
 
 function spectrum(dp::dynamic_problemSampled; p=dp.Problem.p)
     #mus = eigsolve(s -> LinMap(dp, s; p=p)[1], size(dp.StateSmaplingTime, 1), dp.eigN, :LM)
     Nstep = size(dp.StateSmaplingTime, 1)
     #s_start=[dp.Problem.u0 for _ in 1:Nstep] #TODO:fill!!!
-    s_start = rand(typeof(dp.Problem.u0), Nstep)
+    s_start = randsimilar(dp.Problem.u0, Nstep)
 
 
     #randsimilar!(s_start)
@@ -62,30 +65,38 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.Problem.p)
     end
 end
 
-function partialpart(xSA)#::SVector)
+function partialpart(xSA::StaticArray)
     bb = [x.partials[1] for x in xSA]
-    #return SA[bb...]
-    return MVector(bb...);
+    return MVector(bb...)
+end
+function partialpart(xSA::AbstractArray)
+    return [x.partials[1] for x in xSA]
 end
 
-
-function valuepart(xSA)#::SVector)
-    bb = [x.value[1] for x in xSA]
-    #return SA[bb...]
-    return MVector(bb...);
+function valuepart(xSA::StaticArray)
+    bb = [x.value for x in xSA]
+    return MVector(bb...)
+end
+function valuepart(xSA::AbstractArray)
+    return [x.value for x in xSA]
 end
 
 function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .* 0.0, Δu=s0 .* 0.0, Δλ_scaled=1.0, norm_limit=1e-10) where {T}
     # # #maximum(abs.(getindex.(saff_c, 1)))
     # # #maximum(abs.(getindex.(saff_c_m1, 1)))
     # # #Δu_Δλ = (saff_c .- saff_c_m1) ./ 0.01
+    #FowardDiff.Tag{} : TODO# fix a unique tag!
     one_espilon_Dual = ForwardDiff.Dual{Float64}(0.0, 1.0)
     Niteration = 0
-    #TODO: fixed dimension problem!!!!
-    v0_dual = LinMap(dp, s0; p=p .+ one_espilon_Dual .* pDual_dir)[1]
-    v0 = valuepart.(v0_dual)
-    dv0dλ = partialpart.(v0_dual)
-@warn   " p change is commented for testing"   #  p = p .+ pDual_dir .* Δλ_loc
+    # @warn "error if tau is in the parameters"
+    #    ##TODO: fixed dimension problem!!!!
+    #    v0_dual = LinMap(dp, s0; p=p .+ one_espilon_Dual .* pDual_dir)[1]
+    #    v0 = valuepart.(v0_dual)
+    #    dv0dλ = partialpart.(v0_dual)
+
+    v0 = LinMap(dp, s0; p=p)[1]
+    dv0dλ = 0.0 .* v0
+
 
     Finished_itertaion = 0
     do_more_iteration = true
@@ -94,7 +105,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
 
         #println(norm(s0-v0))
         Nstep = size(dp.StateSmaplingTime, 1)
-        s_start = rand(typeof(dp.Problem.u0), Nstep)
+        s_start = randsimilar(dp.Problem.u0, Nstep)
 
 
         #if true#~DODOAU
@@ -126,7 +137,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
 
         #    a0 = real.(find_fix_pont(s0, v0, mus[1], mus[2]))::T
         a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T
-      #  p = p .+ pDual_dir .* Δλ_loc
+        #  p = p .+ pDual_dir .* Δλ_loc
 
         #println("Fix point calculation ---------- Start")
         #TODO: it might be better to incluse the mus calcluations here too
@@ -135,10 +146,10 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
             s0 = a0
             v0 = LinMap(dp, s0; p=p)[1]
             a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, Δu, Δλ_scaled)#::T#TODO: kell a real?
-      #      p = p .+ pDual_dir .* Δλ_loc
+            #      p = p .+ pDual_dir .* Δλ_loc
             # println("find_fix_pont_end")
             normerror = norm(s0 - v0)
-           # println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
+            # println("Internal inter - Finished_itertaion: $Finished_itertaion ; k_fix_iteration: $k_fix_iteration ; noremerror: $normerror")
             if (normerror) < norm_limit #TODO:use input parameters for this with default value
                 #   println("Norm of fixpont mapping: $normerror after : $k_fix_iteration itreation.")
                 #  println("Fix point calculation ---------- End")
@@ -149,7 +160,7 @@ function affine(dp::dynamic_problemSampled, s0::T; p=dp.Problem.p, pDual_dir=p .
         end
         v0 = LinMap(dp, s0; p=p)[1]
         a0, Δλ_loc = (find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, Δu, Δλ_scaled))#::T#TODO: kell a real?
-   #     p = p .+ pDual_dir .* Δλ_loc
+        #     p = p .+ pDual_dir .* Δλ_loc
         # println("find_fix_pont_end")
         # s0 = find_fix_pont(s0, LinMap(dp, s0; p=p), mus[1], mus[2])
 
@@ -172,7 +183,9 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
 
     #global NNN=0
     Nstep = size(dp.StateSmaplingTime, 1)
-    s0 = rand(typeof(dp.Problem.u0), Nstep)
+    #s0 = rand(typeof(dp.Problem.u0), Nstep)
+    s0 = randsimilar(dp.Problem.u0, Nstep)
+    #s0 = [rand(1) .* (copy(dp.Problem.u0)) for _ in 1:Nstep]
     if dp.zerofixpont
         #s0 = zeros(typeof(dp.Problem.u0), Nstep)
         s0 .*= 0.0
@@ -191,7 +204,7 @@ function affine(dp::dynamic_problemSampled; p=dp.Problem.p)
 
 end
 
-function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T # where T
+function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::Tuple{T,ODESolution} where {T}#::T # where T
 
 
     #global NNN +=1
@@ -201,14 +214,34 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T 
     #dt = StateSmaplingTime[2] - StateSmaplingTime[1]
 
     #TODO: milyen interpoláció kell? #"ez és a solver" minimuma dominálja a rendet
-    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-    #itp = interpolate(s, BSpline(Linear()))
-    Hist_interp_linear = scale(itp, StateSmaplingTime)
-    #    itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
-    #    Hist_inÖterp_linear = scale(itp, dp.StateSmaplingTime)
-    hint(p, t) = Hist_interp_linear(t) #TODO: ha úgyis fix a lépls, akkor ez nem is kell!!!
-    hint(p, t, deriv::Type{Val{1}}) = Interpolations.gradient(Hist_interp_linear, t)[1]
-    #hint(p, t) = itp(t) #TODO: akkor ez is elég!!!
+    local Hist_interp_linear
+    local is_vector_of_vectors = false
+    local N_dim = 0
+    if false# length(size(s, 1)) == 1 # TODO: teporary solution for the case we have no delay
+        Hist_interp_linear(t) = s[1]#TODO: ez nem jó, de egyelőre így van, mert a jelenlegi használatban csak ilyen van
+        is_vector_of_vectors = false
+        N_dim = size(s[1], 1)
+    else
+
+        if eltype(s) <: AbstractVector && !(eltype(s) <: StaticArray)
+            s_mat = reduce(hcat, s)
+            itp = interpolate(s_mat, (NoInterp(), BSpline(Cubic(Line(OnGrid())))))
+            Hist_interp_linear = scale(itp, 1:size(s_mat, 1), StateSmaplingTime)
+            is_vector_of_vectors = true
+            N_dim = size(s_mat, 1)
+        else
+            itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+            #itp = interpolate(s, BSpline(Linear()))
+            Hist_interp_linear = scale(itp, StateSmaplingTime)
+            is_vector_of_vectors = false
+        end
+    end
+    function hint(p, t)
+        is_vector_of_vectors ? [Hist_interp_linear(i, t) for i in 1:N_dim] : Hist_interp_linear(t)
+    end
+    function hint(p, t, deriv::Type{Val{1}})
+        is_vector_of_vectors ? [Interpolations.gradient(Hist_interp_linear, i, t)[2] for i in 1:N_dim] : Interpolations.gradient(Hist_interp_linear, t)[1]
+    end
 
 
     #NewTimePoints = StateSmaplingTime .+ dp.Tperiod
@@ -233,9 +266,9 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}#::T 
     #@show dp.Tperiod
     #@show hint(p, 0.0)
     #@show typeof(hint(p, 0.0))
-   # @warn "TODO: T period is not used, problem timespan is used as period"
+    # @warn "TODO: T period is not used, problem timespan is used as period"
     sol = solve(remake(dp.Problem; u0=hint(p, 0.0), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
-   # sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
+    # sol = solve(remake(dp.Problem; u0=hint(p, 0.0), tspan=(0.0, dp.Tperiod), h=hint, p=p); dp.alg...)#, adaptive=dp.adaptive, dt=dt; verbose=false,reltol=1e-7)#, save_everystep=false)#abstol,reltol
     #@show sol.t[end]
 
     ####TODO: az u0- az eleve jön a h ból mint default paramater, de ha a múltat máshogy táromom, akkor lehet, hogy meg kellene tartani.
@@ -334,13 +367,13 @@ end
 function issi_eigen(dp::dynamic_problemSampled; p=dp.Problem.p)
     Nstep = size(dp.StateSmaplingTime, 1)
 
-    s0 = zeros(typeof(dp.Problem.u0), Nstep)
+    s0 = [zero(dp.Problem.u0) for _ in 1:Nstep]
     ## if dp.zerofixpont
     ##     v0=s0
     ## else
     v0 = LinMap(dp, s0; p=p)[1]
     ## end
-    S = [rand(typeof(dp.Problem.u0), Nstep) for _ in 1:dp.eigN]
+    S = [randsimilar(dp.Problem.u0, Nstep) for _ in 1:dp.eigN]
     H = zeros(Float64, dp.eigN, dp.eigN)#For Schur based calculation onlyS
     for _ in 1:12
         #V = [LinMap(dp, Si; p=p)[1] for Si in S]

@@ -9,6 +9,7 @@ using Interpolations
 
 using ForwardDiff
 
+using Random: rand!
 
 
 export dynamic_problemSampled,affine,spectralradius,

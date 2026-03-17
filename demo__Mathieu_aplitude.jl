@@ -1,6 +1,5 @@
 #Demo: Delayed Mathieu equation with damping
-
-using Revise
+5+5
 using DDE_mapping
 
 using BenchmarkTools
@@ -15,6 +14,9 @@ using LinearAlgebra
 using MDBM
 
 
+# develop DDE_mapping
+# activate DDE_mapping
+# add Random: rand!
 # Governing equation
 
 function DelayMathieu(u, h, p, t)
@@ -26,8 +28,10 @@ function DelayMathieu(u, h, p, t)
     dx = u[2]
     ddx = -(δ + ϵ * cos(2pi * t / T)) * u[1] - 2 * ζ * u[2] + b * h(p, t - τ)[1] + F
     # Update the derivative vector
-    @MArray[dx, ddx]
+    [dx, ddx]
 end
+Base.:+(a::MArray, b::Bool) = a .+ b
+Base.:+(a::MArray, b::Float64) = a .+ b #TODO: where to put this?
 Base.:+(a::SVector, b::Bool) = a .+ b
 Base.:+(a::SVector, b::Float64) = a .+ b #TODO: where to put this?
 
@@ -44,15 +48,15 @@ p = ζ, δ, ϵ, b, τ, T
 
 # test simulation ---------------
 #initial condition
-u0 = @MArray [1.0, 0.0]
+u0 =  [1.0, 0.0]
 #history function
-h(p, t) = @MArray [0.0; 0.0]
+h(p, t) =  [0.0; 0.0]
 probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, T * 1000.0), p; constant_lags=[τ])
 
 #Parameters for the solver as a Dict (it is necessary to collect it for later use)
 #Solver_args = Dict(:alg => MethodOfSteps(BS3()), :callback => cb, :adaptive => true, :dt => 0.01, :verbose => false, :reltol => 1e-9)#, save_everystep=false)#abstol,reltol)
-Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-8)#
-Solver_args = Dict()#
+Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-6)#
+#Solver_args = Dict()#
 sol = solve(probMathieu; Solver_args...)#abstol,reltol
 
 plot(sol)
@@ -75,17 +79,18 @@ plot!(getindex.(sol_period.u,1),getindex.(sol_period.u,2))
 
 # ---------------- Affine mapping ---------------------------
 using KrylovKit
-Neig=8#number of required eigen values
-Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-32,krylovdim=18+5,verbosity=0));
+Neig=5#number of required eigen values
+Krylov_arg=(Neig,:LM, KrylovKit.Arnoldi(tol=1e-42,krylovdim=8+6,verbosity=0));
 
 τmax=τ #maximal timedelay in the mapping
 Nstep = 100 # discretization number of the mapping
 Timeperiod=T # timeperiod of the mapping
+probMathieu = DDEProblem(DelayMathieu, u0, h, (0.0, Timeperiod), p; constant_lags=[τ])
 
 #Creating the problem
 dpMathieu = dynamic_problemSampled(probMathieu, Solver_args, τmax,
 Timeperiod; Historyresolution=Nstep,
-    zerofixpont=false,    affineinteration=8,
+    zerofixpont=false,    affineinteration=2,
     Krylov_arg=Krylov_arg)
 
 
@@ -144,14 +149,14 @@ end
 
 #Plotting the maximal amplitud on the stable domain only
 Aaffsat = deepcopy(Aaff);
-Aaffsat[Spek_aff.>1.0] .= 0.0;#eliminate the positions of instable case
+Aaffsat[Spek_aff.>1.0] .= 1.0;#eliminate the positions of instable case
 heatmap(δv, ϵv, log.(Aaffsat))
 
 
 
 #Plotting the maximal amplitud on the stable domain only
 Spek_affsat = deepcopy(Spek_aff);
-Spek_affsat[Spek_affsat.>1.0] .= 0.0;
+Spek_affsat[Spek_affsat.>1.0] .= 1.0;
 heatmap(δv, ϵv, log.(Spek_affsat))
 
 
