@@ -1,8 +1,8 @@
 module DDE_mapping
 
 
-using KrylovKit
 using DifferentialEquations
+using KrylovKit
 using StaticArrays
 using LinearAlgebra
 using Interpolations
