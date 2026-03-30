@@ -65,18 +65,27 @@ function spectralradius(dp::dynamic_problemSampled; p=dp.Problem.p)
     end
 end
 
+function partialpart(xSA::SVector)
+    bb = [x.partials[1] for x in xSA]
+    return SVector(bb...)
+end
+function valuepart(xSA::SVector)
+    bb = [x.value for x in xSA]
+    return MVSVectorector(bb...)
+end
+
 function partialpart(xSA::StaticArray)
     bb = [x.partials[1] for x in xSA]
+    return MVector(bb...)
+end
+function valuepart(xSA::StaticArray)
+    bb = [x.value for x in xSA]
     return MVector(bb...)
 end
 function partialpart(xSA::AbstractArray)
     return [x.partials[1] for x in xSA]
 end
 
-function valuepart(xSA::StaticArray)
-    bb = [x.value for x in xSA]
-    return MVector(bb...)
-end
 function valuepart(xSA::AbstractArray)
     return [x.value for x in xSA]
 end

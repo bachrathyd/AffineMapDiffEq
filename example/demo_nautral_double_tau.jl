@@ -34,7 +34,7 @@ a = 1.0#
 zeta=0.2
 b = 0.4#0.7
 c = 0.3#0.5
-τ1=5.0
+τ1=4.0
 τ2=5.0
 τmax=maximum([τ1,τ2])
 T=τmax
@@ -50,7 +50,7 @@ h(p, t, ::Type{Val{1}}) = @MArray [0.5; 1.5]
 #h(p, t, ::Type{Val{2}}) = @MArray [0.0; 1.0]
     
 #h(p, t) = SA[0.0; 0.0]
-probMixtau = DDEProblem(mixedDelay_oscill, u0, h, (0.0, T * 5), p) #, neutral=true)#; constant_lags=[τ]
+probMixtau = DDEProblem(mixedDelay_oscill, u0, h, (0.0, T * 55), p) #, neutral=true)#; constant_lags=[τ]
 
 #Parameters for the solver as a Dict (it is necessary to collect it for later use)
 #Solver_args = Dict(:alg => MethodOfSteps(BS3()), :callback => cb, :adaptive => true, :dt => 0.01, :verbose => false, :reltol => 1e-9)#, sτ1ve_everystep=false)#abstol,reltol)
@@ -60,6 +60,7 @@ sol = solve(probMixtau; Solver_args...)#abstol,reltol
 
 plot(sol)
 plot!(sol(sol.t, Val{1}, idxs=2),lw=2)
+
 #last period of the long simulation:
 t_select_period = 0.0:0.01:T
 t_select_delay = eriod = 0.0:0.001:τmax
@@ -89,7 +90,7 @@ probMixtau = DDEProblem(mixedDelay_oscill, u0, h, (0.0, Timeperiod), p)#; consta
 
 dp_mix_delay = dynamic_problemSampled(probMixtau, Solver_args, τmax,
     Timeperiod; Historyresolution=Nstep,
-    zerofixpont=true, affineinteration=3,
+    zerofixpont=true, affineinteration=0,
     Krylov_arg=Krylov_arg)
 
 
@@ -144,7 +145,7 @@ end
 
 #Plotting the maximal amplitud on the stable domain only
 Spek_affsat = deepcopy(Spek_aff);
-Spek_affsat[Spek_affsat.>1.0] .= 0.0;
+Spek_affsat[Spek_affsat.>1.0] .= 1.0;
 #heatmap(τ2v, τ1v, log.(Spek_affsat))
 heatmap(τ1v, τ2v, log.(Spek_affsat'))
 

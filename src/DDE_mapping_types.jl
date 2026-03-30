@@ -4,7 +4,7 @@ mutable struct dynamic_problemSampled#{TCompFloat,Tint,Tfloat}
     Problem#::DDEProblem #e.g. =DDEProblem(....)
     alg#::Dict{Symbol, Any}               XXXX#::MethodOfSteps # e.g.: alg = MethodOfSteps(Tsit5())
     maxdelay#::Tfloat
-    Tperiod#::Tfloat
+    Tperiod#::Tfloat # deprecated - the time span of the problem defined in the DDEProblem is used
     #dt#::Tfloat
     zerofixpont::Bool
     affineinteration::Int#::Bool
