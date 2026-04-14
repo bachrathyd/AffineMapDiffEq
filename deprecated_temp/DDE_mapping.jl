@@ -1,19 +1,20 @@
 module DDE_mapping
 
 
-using KrylovKit
 using DifferentialEquations
+using KrylovKit
 using StaticArrays
 using LinearAlgebra
 using Interpolations
 
 using ForwardDiff
 
+using Random: rand!
 
 
 export dynamic_problemSampled,affine,spectralradius,
 spectrum,LinMap,
-partialpart
+partialpart,valuepart,find_fix_pont
 
 include("DDE_mapping_types.jl")
 include("DDE_mapping_functions.jl")

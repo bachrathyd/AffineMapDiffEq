@@ -4,7 +4,7 @@ plotly()
 
 dt=0.001
 #history
-h(t)=sin.(t*10.0).-sign.(t.+1)+2.0
+h(t)=0.5+sin.(t*10.0).-sign.(t.+1)+2.0
 u0=1.0
 u0=h(0.0)
 
@@ -13,9 +13,9 @@ x0=h.(t0)
 x0[end]=u0
 
 #parameters
-#a=0.2;#nice
+a=0.2;#nice
 a=1.0#ugly
-b=1
+b=1.0
 
 x_renewal(t) = a * x(t - 1) + b * x(t - √2).^0.5
 x_renewal_callback(t)=x_renewal(t)>4.0 ?  x_renewal(t)/2.0 : x_renewal(t)
@@ -36,17 +36,18 @@ plot(t0,x0)
 using DifferentialEquations
 function renewal(u, h, p, t)
     a,b=p
+    @show (a,b,h(p, t - 1.0, Val{1}), h(p, t - √2, Val{1}))
     du=a * h(p, t - 1.0, Val{1})+ b * h(p, t - √2, Val{1}).^0.5
     du=du>4.0 ? du/2.0 : du
 end
 
 p=a,b
-h(p, t) = 0.0
+#h(t)=0.0
 h(p, t, deriv::Type{Val{1}}) = t==0.0 ? u0 : h(t)
 
 prob_renewal = DDEProblem(renewal,h, (0.0, T ), p, neutral=true)
 
-@time sol = solve(prob_renewal, MethodOfSteps(Tsit5()),reltol=1e-18)
+@time sol = solve(prob_renewal, MethodOfSteps(Tsit5()),reltol=1e-38)
 
 #plot!(sol) #irrelevant variable
 plot!(sol.t,sol(sol.t, Val{1}).u)
@@ -57,6 +58,9 @@ plot!(sol.t,sol(sol.t, Val{1}).u)
 error("Ezt itt még nem megy!")
 
 # ---------------- Affine mapping ---------------------------
+isless(::AbstractFloat, ::ForwardDiff.Dual{Ty})
+
+Base.:isless(a::AbstractFloat, b::ForwardDiff.Dual{Tb}) where Tb = a < b.value
 using DDE_mapping
 
 using KrylovKit
@@ -74,10 +78,9 @@ Timeperiod; Historyresolution=Nstep,
     zerofixpont=false,    affineinteration=1,
     Krylov_arg=Krylov_arg)
 
-
+    s0aff=[tx for tx in dprenewal.StateSmaplingTime]
 #solvig the problem (mu: Floquet multiplier, saff: discretized foxed point (in [-τmax,0]), sol: the corresponding periodic solution of the fixpoint)
-@time mu, saff, sol0 = affine(dprenewal; p=p);
-
+@time mu, saff, sol0 = affine(dprenewal,s0aff; p=p);
 
 # Comparing the solutions:
 plot(sol_period[1, :], sol_period[2, :], marker=:circle,markersize=6,lab="")
