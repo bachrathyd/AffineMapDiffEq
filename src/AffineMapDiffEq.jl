@@ -16,7 +16,7 @@ export dynamic_problemSampled,
        LinMap,
        partialpart, 
        valuepart, 
-       find_fix_pont
+       find_fixed_point
 
 # Include sub-modules/files
 include("types.jl")

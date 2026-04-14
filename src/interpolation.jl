@@ -33,19 +33,21 @@ end
     end
 end
 
+const DEFAULT_ITP = BSpline(Cubic(Line(OnGrid())))
+
 """
-    construct_history(s, StateSmaplingTime)
+    construct_history(s, StateSmaplingTime; itp_type=DEFAULT_ITP)
 
 Analyzes the input state sequence and constructs an appropriate `AffineHistory` wrapper.
 """
-function construct_history(s::T, StateSmaplingTime) where {T}
+function construct_history(s::T, StateSmaplingTime; itp_type=DEFAULT_ITP) where {T}
     if eltype(s) <: AbstractVector && !(eltype(s) <: StaticArray)
         s_mat = reduce(hcat, s)
-        itp = interpolate(s_mat, (NoInterp(), BSpline(Cubic(Line(OnGrid())))))
+        itp = interpolate(s_mat, (NoInterp(), itp_type))
         sitp = scale(itp, 1:size(s_mat, 1), StateSmaplingTime)
         return AffineHistory{typeof(sitp), eltype(s)}(sitp, true, size(s_mat, 1))
     else
-        itp = interpolate(s, BSpline(Cubic(Line(OnGrid()))))
+        itp = interpolate(s, itp_type)
         sitp = scale(itp, StateSmaplingTime)
         return AffineHistory{typeof(sitp), eltype(s)}(sitp, false, 0)
     end

@@ -1,0 +1,19 @@
+# Generated figures
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+
+# Julia project files
+docs/build/
+deps/
+test/build/
+*.jl.cov
+*.jl.mem
+*.jl.tmp
+
+# Editor/OS files
+.DS_Store
+.vscode/
+Thumbs.db

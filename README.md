@@ -4,9 +4,9 @@
 
 ## Key Features
 - **Affine Mapping:** Efficiently find fixed points and Floquet multipliers of periodic solutions.
-- **Spectral Analysis:** Stability analysis using Krylov-based methods (`KrylovKit.jl`).
-- **AD Compatible:** Seamlessly works with `ForwardDiff.jl` for sensitivity analysis.
-- **DDE Support:** Built on top of `DifferentialEquations.jl` for robust delay equation solving.
+- **Spectral Analysis:** Stability analysis using Krylov-based methods (`KrylovKit.jl`) or Subspace Iteration (ISSI).
+- **AD Compatible:** Seamlessly works with `ForwardDiff.jl` for sensitivity analysis and exact Jacobians.
+- **Performance:** Optimized for type-stability and low allocations, supporting `StaticArrays`.
 
 ## Installation
 Currently, this package is in development. You can use it by cloning the repository and activating the project.
@@ -18,38 +18,48 @@ Pkg.instantiate()
 ```
 
 ## Quick Example: Mathieu Equation
+The following example demonstrates the stability analysis of a delayed Mathieu equation with external forcing.
+
 ```julia
 using AffineMapDiffEq
 using StaticArrays
 using DifferentialEquations
 using KrylovKit
 
-# Define the DDE
-function DelayMathieu(u, h, p, t)
+# 1. Define the Governing Equation
+function DelayMathieu!(du, u, h, p, t)
     ζ, δ, ϵ, b, τ, T = p
-    dx = u[2]
-    ddx = -(δ + ϵ * cos(2π * t / T)) * u[1] - 2ζ * u[2] + b * h(p, t - τ)[1] + 0.1*(cos(2π*t/T)^10)
-    @MArray [dx, ddx]
+    F = 0.1 * (cos(2π * t / T)^10)
+    du[1] = u[2]
+    du[2] = -(δ + ϵ * cos(2π * t / T)) * u[1] - 2ζ * u[2] + b * h(p, t - τ)[1] + F
 end
 
-# Parameters
+# 2. Setup Parameters and Problem
 p = (0.02, 1.5, 0.15, 0.5, 2π, 2π)
-u0 = @MArray [1.0, 0.0]
-h(p, t) = @MArray [0.0, 0.0]
-prob = DDEProblem(DelayMathieu, u0, h, (0.0, 2π), p; constant_lags=[2π])
+u0 = [1.0, 0.0]
+h(p, t) = [0.0, 0.0]
+prob = DDEProblem{true}(DelayMathieu!, u0, h, (0.0, 2π), p; constant_lags=[2π])
 
-# Setup Sampling Problem
-dp = dynamic_problemSampled(prob, Dict(:alg => MethodOfSteps(BS3())), 2π, 2π)
+# 3. Solver and Mapping Configuration
+Solver_args = Dict(:alg => MethodOfSteps(Tsit5()), :reltol => 1e-3)
+Krylov_arg = (8, :LM, KrylovKit.Arnoldi(tol=1e-12))
 
-# Calculate stability
-mu, saff, sol0 = affine(dp; p=p)
-println("Max Floquet multiplier: ", maximum(abs.(mu[1])))
+dp = dynamic_problemSampled(prob, Solver_args, 2π; 
+    Historyresolution=100,
+    zerofixpont=false, 
+    affineinteration=2,
+    Krylov_arg=Krylov_arg)
+
+# 4. Calculate Fixed Point and Floquet Multipliers
+mus, saff, sol0 = affine(dp; p=p)
+mu = mus[1] # Eigenvalues
+println("Max Floquet multiplier: ", maximum(abs.(mu)))
 ```
 
 ## Folder Structure
-- `src/`: Core implementation.
+- `src/`: Core implementation (types, mapping, spectrum, interpolation).
 - `examples/`: Usage examples and demos.
-- `docs/`: Documentation.
+- `docs/`: Documentation sources.
 - `paper/`: Research publication sources.
 
 ## License

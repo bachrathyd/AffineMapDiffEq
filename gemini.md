@@ -57,10 +57,15 @@ AffineMapDiffEq.jl/
 ### Task 2: Core Refactoring (LinMap & Affine)
 - **Interpolation Engine:** Clean up the interpolation selection in `LinMap`. Default to Cubic interpolation but provide a clean API for overrides. Ensure boundary conditions ($t \leq 0$) are handled type-stably.
 - **Fixed-Point Iteration:** In the `affine` function, make the hardcoded iteration tolerances configurable parameters.
-- **Standardized AD:** Implement a robust `ForwardDiff.Dual` strategy using unique tags to allow the package to be used within higher-level optimization or sensitivity analysis loops.
+- **Standardized AD & Fallback:** Implement a robust `ForwardDiff.Dual` strategy using unique tags. Introduce `perturbation_size` in `dynamic_problemSampled` (default `0.0` for AD). If `perturbation_size > 0.0`, fallback to finite difference mapping to support non-AD-compatible solvers.
 - **Unified Spectral Analysis:** Consolidate `issi_eigen` and `KrylovKit` paths into a single `spectrum(dp)` function using multiple dispatch or keyword arguments to select the most efficient solver.
 
 ### Task 3: Documentation & Registration
 - **Docstrings:** Generate comprehensive docstrings for all exported symbols: `LinMap`, `spectrum`, `spectralradius`, `dynamic_problemSampled`, etc.
 - **README:** Create a compelling `README.md` featuring the Mathieu equation as the primary usage example.
 - **Registry Readiness:** Prepare all metadata and project structure required for official Julia package registration.
+
+
+
+# Example imlementations:
+Do the calcuations in separeated blocks, (separet with ## to be able to run the sections.) If something is computed display it (and plot if needed) immediately, and only after that proceede to the next bolock of computation (so the user can flow tha procidure in "real time" and not only at the very end)

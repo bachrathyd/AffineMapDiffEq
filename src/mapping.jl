@@ -3,15 +3,30 @@
 struct AffineTag end
 
 """
-    dynamic_problemSampled(prob, alg, maxdelay; Historyresolution=200, zerofixpont=true, affineinteration=1, Krylov_arg=())
+    dynamic_problemSampled(prob::DDEProblem, alg, maxdelay; Historyresolution=200, zerofixpont=true, affineinteration=1, Krylov_arg=(), perturbation_size=0.0, itp_type=DEFAULT_ITP)
 
-Constructor for `dynamic_problemSampled`. 
+Constructor for the `dynamic_problemSampled` configuration structure.
+
+# Arguments
+- `prob`: The underlying `DDEProblem`.
+- `alg`: Solver options as a `Dict` (e.g., `Dict(:alg => MethodOfSteps(Tsit5()))`).
+- `maxdelay`: The maximum delay in the system, defining the history length.
+
+# Keywords
+- `Historyresolution`: Number of points used to discretize the history.
+- `zerofixpont`: If `true`, assumes the fixed point of the mapping is at the origin.
+- `affineinteration`: Number of outer iterations for the affine mapping (re-calculating the spectrum).
+- `Krylov_arg`: Arguments for the spectral solver (e.g., `(Neig, :LM, Arnoldi())`).
+- `perturbation_size`: Step size for finite difference mapping fallback. If `0.0`, `ForwardDiff` is used.
+- `itp_type`: Interpolation type from `Interpolations.jl`.
 """
 function dynamic_problemSampled(prob, alg, maxdelay; 
                                Historyresolution=200,
                                zerofixpont=true, 
                                affineinteration=1, 
-                               Krylov_arg=())
+                               Krylov_arg=(),
+                               perturbation_size=0.0,
+                               itp_type=DEFAULT_ITP)
     
     if Historyresolution == 1
         StateSmaplingTime = [0.0]
@@ -20,19 +35,23 @@ function dynamic_problemSampled(prob, alg, maxdelay;
     end
     
     dynamic_problemSampled(prob, alg, maxdelay, zerofixpont, affineinteration,
-        StateSmaplingTime, Krylov_arg)
+        StateSmaplingTime, Krylov_arg, Float64(perturbation_size), itp_type)
 end
 
 """
     LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p) where {T}
 
-Core linear mapping function that integrates the DDE problem over one period.
+Linear mapping operator \$\\mathcal{A}\$ that maps an initial history segment `s` to the history segment after one period \$T\$.
+
+# Returns
+- `v`: The resulting discretized history segment.
+- `sol`: The `ODESolution` object for the integration period.
 """
 function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::Tuple{T, ODESolution} where {T}
     StateSmaplingTime = dp.StateSmaplingTime
     
-    # Use the type-stable history constructor
-    ah = construct_history(s, StateSmaplingTime)
+    # Use the type-stable history constructor with configured interpolation
+    ah = construct_history(s, StateSmaplingTime; itp_type=dp.itp_type)
 
     # Standardized parameter passing and type-stable history wrapper
     new_prob = remake(dp.Problem; u0=ah(p, 0.0), h=ah, p=p)
@@ -55,13 +74,14 @@ function affine(dp::dynamic_problemSampled, s0::T;
                 Δu=nothing, 
                 Δλ_scaled=1.0, 
                 norm_limit=1e-10,
-                max_fix_iter=30) where {T}
+                max_fix_iter=30,
+                method=:Krylov) where {T}
 
     # Standardized ForwardDiff strategy with unique Tag
-    one_epsilon_Dual = ForwardDiff.Dual{AffineTag}(0.0, 1.0)
+    # one_epsilon_Dual = ForwardDiff.Dual{AffineTag}(0.0, 1.0) # Unused but for reference
     
     # Initialize directions if not provided
-    p_dir = isnothing(pDual_dir) ? map(x -> 0.0, p) : pDual_dir
+    # p_dir = isnothing(pDual_dir) ? (p isa SciMLBase.NullParameters ? p : map(x -> 0.0, p)) : pDual_dir
     du_dir = isnothing(Δu) ? map(x -> zero(x), s0) : Δu
 
     # Initial mapping
@@ -72,38 +92,60 @@ function affine(dp::dynamic_problemSampled, s0::T;
     Finished_iteration = 0
     do_more_iteration = true
     
+    mus = nothing
+    sol = nothing
+    norm_err = norm(s0 .- v0)
+
     while do_more_iteration
         Nstep = length(dp.StateSmaplingTime)
         s_start = randsimilar(dp.Problem.u0, Nstep)
 
         # Function barrier for the mapping perturbation
-        TheMapping = let dp=dp, s0=s0, v0=v0, tag=AffineTag()
+        TheMapping = let dp=dp, s0=s0, v0=v0, tag=AffineTag(), p=p
             function (ds::T) where {T}
-                one_eps = ForwardDiff.Dual{typeof(tag)}(0.0, 1.0)
-                perturbed_v, _ = LinMap(dp, ds .* one_eps .+ s0; p=p)
-                return partialpart.(perturbed_v .- v0)
+                if dp.perturbation_size == 0.0
+                    # Exact Jacobian via ForwardDiff
+                    one_eps = ForwardDiff.Dual{typeof(tag)}(0.0, 1.0)
+                    # We need to ensure that the input to LinMap is Dual
+                    perturbed_s = ds .* one_eps .+ s0
+                    perturbed_v, _ = LinMap(dp, perturbed_s; p=p)
+                    return partialpart.(perturbed_v .- v0)
+                else
+                    # Finite difference fallback
+                    eps_val = dp.perturbation_size
+                    perturbed_v, _ = LinMap(dp, ds .* eps_val .+ s0; p=p)
+                    return (perturbed_v .- v0) ./ eps_val
+                end
             end
         end
 
         # Spectral analysis
-        mus = getindex(schursolve(TheMapping, s_start, dp.Krylov_arg...), [3, 2, 1])
-        eigval, eigvec = mus[1], mus[2]
+        if method == :Krylov
+            eigval, eigvec, info = spectrum_krylov(TheMapping, s_start, dp.Krylov_arg...)
+        elseif method == :ISSI
+            Neig = dp.Krylov_arg[1]
+            eigval, eigvec, info = issi_eigen(TheMapping, s_start, Neig)
+        else
+            error("Unknown method: $method")
+        end
+        mus = (eigval, eigvec, info)
 
         # Fixed-point iteration
-        a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, du_dir, Δλ_scaled)
+        a0, Δλ_loc = find_fixed_point(s0, v0, eigval, eigvec, dv0dλ, du_dir, Δλ_scaled)
 
         for _ in 1:max_fix_iter
             Niteration += 1
             s0 = a0
             v0, _ = LinMap(dp, s0; p=p)
-            a0, Δλ_loc = find_fix_pont(s0, v0, eigval, eigvec, dv0dλ, du_dir, Δλ_scaled)
-            if norm(s0 .- v0) < norm_limit
+            a0, Δλ_loc = find_fixed_point(s0, v0, eigval, eigvec, dv0dλ, du_dir, Δλ_scaled)
+            norm_err = norm(s0 .- v0)
+            if norm_err < norm_limit
                 break
             end
         end
         
         v0, sol = LinMap(dp, s0; p=p)
-        a0, Δλ_loc = find_fix_pont(s0, v0, mus[1], mus[2], dv0dλ, du_dir, Δλ_scaled)
+        a0, Δλ_loc = find_fixed_point(s0, v0, eigval, eigvec, dv0dλ, du_dir, Δλ_scaled)
 
         s0 = a0
         v0, sol = LinMap(dp, s0; p=p)
@@ -111,25 +153,26 @@ function affine(dp::dynamic_problemSampled, s0::T;
         
         Finished_iteration += 1
         do_more_iteration = Finished_iteration < dp.affineinteration
-        
-        if !do_more_iteration
-            return mus, s0::T, sol, p, Niteration, norm_err
-        end
     end
+    
+    return mus, s0::T, sol, p, Niteration, norm_err
 end
 
 function affine(dp::dynamic_problemSampled; p=dp.Problem.p, kwargs...)
     Nstep = length(dp.StateSmaplingTime)
-    s0 = randsimilar(dp.Problem.u0, Nstep)
-    if dp.zerofixpont
-        fill!(s0, zero(eltype(s0)))
+    s0 = [zero(dp.Problem.u0) for _ in 1:Nstep]
+    if !dp.zerofixpont
+        # Initialize with random if not zero fixed point and not provided
+        s0 = randsimilar(dp.Problem.u0, Nstep)
     end
     return affine(dp, s0; p=p, kwargs...)
 end
 
 # Helper functions
-function find_fix_pont(s0::T, v0::T, eigval, eigvec) where {T}
+function find_fixed_point(s0::T, v0::T, eigval, eigvec) where {T}
     x = v0 .- s0
+    # Use real part if eigenvalues are complex but result should be real? 
+    # Actually keep it complex if needed, but usually we want real fixed point.
     AtA = [dot(eigvec[i], eigvec[j]) for i in eachindex(eigvec), j in eachindex(eigvec)]
     Atx = [dot(eigvec[i], x) for i in eachindex(eigvec)]
     ci = AtA \ Atx
@@ -138,22 +181,30 @@ function find_fix_pont(s0::T, v0::T, eigval, eigvec) where {T}
     return fix_v, 0.0
 end
 
-function find_fix_pont(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::Tlam) where {T,Tlam}
+function find_fixed_point(s0::T, v0::T, eigval, eigvec, dv0dλ, Δu, Δλ_scaled::Tlam) where {T,Tlam}
     x = v0 .- s0
     Atx = [dot(eigvec[i], x) for i in eachindex(eigvec)]
     Atdvdlam = [dot(eigvec[i], dv0dλ) for i in eachindex(eigvec)]
     ΔuAt = [dot(Δu, eigvec[i]) for i in eachindex(eigvec)]
     
+    # Ensure T_jac is correctly typed
     T_jac = vcat(hcat(diagm(eigval .- 1.0), Atdvdlam),
-                 hcat(ΔuAt', Δλ_scaled))
+                 hcat(transpose(ΔuAt), Δλ_scaled))
     
     ci_arch = T_jac \ vcat(-Atx, 0.0)
     ci = ci_arch[1:end-1]
     Δλ_loc = real(ci_arch[end])
     ci_mu = ci .* eigval
     
-    fix_v = real.(v0 .+ mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu)))
-    return fix_v::T, Δλ_loc::Tlam
+    # Summing up the corrections
+    fix_v = v0 .+ mapreduce(x -> x[1] * x[2], +, zip(eigvec, ci_mu))
+    
+    # We might want to return real part if we know the solution is real
+    if eltype(s0) <: AbstractArray{<:Real} || eltype(s0) <: Real
+        return real.(fix_v), Δλ_loc
+    else
+        return fix_v, Δλ_loc
+    end
 end
 
 @inline function getvalues(sol::ODESolution, t, p)
