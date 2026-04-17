@@ -58,6 +58,7 @@ end
     issi_eigen(f, s_start, Neig; max_iter=12)
 
 Internal Subspace Iteration (ISSI) based eigen analysis.
+Optimized to avoid unnecessary allocations.
 """
 function issi_eigen(f, s_start::T, Neig; max_iter=12) where {T}
     Nstep = length(s_start)
@@ -65,33 +66,36 @@ function issi_eigen(f, s_start::T, Neig; max_iter=12) where {T}
     v0 = f(s0)
     
     S = [randsimilar(s0[1], Nstep) for _ in 1:Neig]
-    H = zeros(ComplexF64, Neig, Neig)
+    V = [similar(S[1]) for _ in 1:Neig]
     
-    V = copy(S)
     for _ in 1:max_iter
         for i in 1:Neig
-            V[i] = f(S[i] .+ s0) .- v0
+            V[i] .= f(S[i] .+ s0) .- v0
         end
         
-        # StS = [S[i]' * S[j] for i in 1:Neig, j in 1:Neig]
-        # StV = [S[i]' * V[j] for i in 1:Neig, j in 1:Neig]
-        # H = StS \ StV
+        # Compute H = (S'S) \ (S'V) efficiently using dot products
+        Gram = [dot(S[i], S[j]) for i in 1:Neig, j in 1:Neig]
+        SV = [dot(S[i], V[j]) for i in 1:Neig, j in 1:Neig]
         
-        # More efficient way to compute H
-        S_mat = reduce(hcat, S)
-        V_mat = reduce(hcat, V)
-        H = (S_mat' * S_mat) \ (S_mat' * V_mat)
+        H = Gram \ SV
 
         FShurr = schur(H)
         for i in 1:Neig
-            S[i] = sum(FShurr.vectors[j, i] .* V[j] for j in 1:Neig)
+            # Recompute S as a linear combination of V using Schur vectors
+            S[i] .= sum(FShurr.vectors[j, i] .* V[j] for j in 1:Neig)
             S[i] ./= norm(S[i])
         end
     end
     
-    Eigvals = eigvals(H)
+    # Final eigenvalue extraction from the projected subspace
+    H_final = [dot(S[i], f(S[j] .+ s0) .- v0) for i in 1:Neig, j in 1:Neig]
+    Eigvals, Eigvecs_proj = eigen(H_final)
+    
+    # Reconstruct eigenvectors in the original space
+    S_final = [sum(Eigvecs_proj[j, i] .* S[j] for j in 1:Neig) for i in 1:Neig]
+    
     p_idx = sortperm(Eigvals, by=abs, rev=true)
-    return Eigvals[p_idx], S[p_idx], nothing # Return nothing for info
+    return Eigvals[p_idx], S_final[p_idx], nothing
 end
 
 # Utilities for ForwardDiff compatibility
@@ -103,40 +107,28 @@ function randsimilar(x::StaticArray, N::Int)::Vector{typeof(x)}
     [rand(typeof(x)) for _ in 1:N]
 end
 
-function partialpart(xSA::SVector)
-    bb = [x.partials[1] for x in xSA]
-    return SVector(bb...)
-end
-
-function valuepart(xSA::SVector)
-    bb = [x.value for x in xSA]
-    return MVector(bb...)
-end
-
 function partialpart(xSA::StaticArray)
-    bb = [x.partials[1] for x in xSA]
-    return MVector(bb...)
+    return map(x -> ForwardDiff.partials(x, 1), xSA)
 end
 
 function valuepart(xSA::StaticArray)
-    bb = [x.value for x in xSA]
-    return MVector(bb...)
+    return map(x -> ForwardDiff.value(x), xSA)
 end
 
 function partialpart(xSA::AbstractArray)
-    return [x.partials[1] for x in xSA]
+    return [ForwardDiff.partials(x, 1) for x in xSA]
 end
 
 function valuepart(xSA::AbstractArray)
-    return [x.value for x in xSA]
+    return [ForwardDiff.value(x) for x in xSA]
 end
 
 function partialpart(x::ForwardDiff.Dual)
-    return x.partials[1]
+    return ForwardDiff.partials(x, 1)
 end
 
 function valuepart(x::ForwardDiff.Dual)
-    return x.value
+    return ForwardDiff.value(x)
 end
 
 function partialpart(x::Number)

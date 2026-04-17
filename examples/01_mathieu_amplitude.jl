@@ -1,8 +1,8 @@
 # Example 01: Delayed Mathieu Equation - Stability and Amplitude Analysis
 # Structured Visualization: Time Series, Periodic Orbit, and Spectrum
 
-using Pkg;
-Pkg.activate(".");
+#using Pkg;
+#Pkg.activate(".");
 using AffineMapDiffEq
 using StaticArrays
 using DifferentialEquations
@@ -83,7 +83,7 @@ vlines!(ax_complex, [0], color=:gray, linewidth=0.5)
 hlines!(ax_complex, [0], color=:gray, linewidth=0.5)
 
 display(fig)
-save("examples/01_mathieu_analysis.png", fig)
+#save("examples/01_mathieu_analysis.png", fig)
 
 ## 6. Stability Chart (Brute Force + MDBM Overlay)
 println("Starting Stability Chart analysis...")
@@ -142,7 +142,7 @@ hm2 = heatmap!(ax_rho, δv, ϵv, log.(Spec_sat'), colormap=:inferno)
 scatter!(ax_rho, x_mdbm, y_mdbm, color=:black, markersize=4)
 Colorbar(fig_chart[2, 2], hm2, vertical=false, label="log(ρ)")
 
-save("examples/01_mathieu_stability_chart.png", fig_chart)
+#save("examples/01_mathieu_stability_chart.png", fig_chart)
 display(fig_chart)
 
-println("Analysis complete. Figures saved.")
+println("Analysis complete.")

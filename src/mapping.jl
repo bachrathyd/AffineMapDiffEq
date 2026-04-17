@@ -58,7 +58,8 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::Tuple{T, ODES
     sol = solve(new_prob; dp.alg...)
     
     tend = sol.t[end]
-    v = [getvalues(sol, ti + tend, p) for ti in StateSmaplingTime]
+    # Use map for potentially better performance than list comprehension
+    v = map(ti -> getvalues(sol, ti + tend, p), StateSmaplingTime)
     
     return v, sol
 end
@@ -77,11 +78,7 @@ function affine(dp::dynamic_problemSampled, s0::T;
                 max_fix_iter=30,
                 method=:Krylov) where {T}
 
-    # Standardized ForwardDiff strategy with unique Tag
-    # one_epsilon_Dual = ForwardDiff.Dual{AffineTag}(0.0, 1.0) # Unused but for reference
-    
     # Initialize directions if not provided
-    # p_dir = isnothing(pDual_dir) ? (p isa SciMLBase.NullParameters ? p : map(x -> 0.0, p)) : pDual_dir
     du_dir = isnothing(Δu) ? map(x -> zero(x), s0) : Δu
 
     # Initial mapping
@@ -101,20 +98,24 @@ function affine(dp::dynamic_problemSampled, s0::T;
         s_start = randsimilar(dp.Problem.u0, Nstep)
 
         # Function barrier for the mapping perturbation
-        TheMapping = let dp=dp, s0=s0, v0=v0, tag=AffineTag(), p=p
+        TheMapping = let dp=dp, s0=s0, tag=AffineTag(), p=p
             function (ds::T) where {T}
                 if dp.perturbation_size == 0.0
-                    # Exact Jacobian via ForwardDiff
+                    # Exact Jacobian action via ForwardDiff directional derivative
                     one_eps = ForwardDiff.Dual{typeof(tag)}(0.0, 1.0)
-                    # We need to ensure that the input to LinMap is Dual
-                    perturbed_s = ds .* one_eps .+ s0
+                    # Create perturbed history: s = s0 + ds * epsilon
+                    perturbed_s = map((s0_i, ds_i) -> s0_i .+ ds_i .* one_eps, s0, ds)
                     perturbed_v, _ = LinMap(dp, perturbed_s; p=p)
-                    return partialpart.(perturbed_v .- v0)
+                    # Extract directional derivative (partial part)
+                    return map(partialpart, perturbed_v)
                 else
                     # Finite difference fallback
                     eps_val = dp.perturbation_size
-                    perturbed_v, _ = LinMap(dp, ds .* eps_val .+ s0; p=p)
-                    return (perturbed_v .- v0) ./ eps_val
+                    perturbed_v, _ = LinMap(dp, map((s0_i, ds_i) -> s0_i .+ ds_i .* eps_val, s0, ds); p=p)
+                    # v0 must be re-calculated if s0 changed, but for Krylov it's usually fixed at s0
+                    # Here we assume v0 corresponds to s0
+                    v_base, _ = LinMap(dp, s0; p=p)
+                    return (perturbed_v .- v_base) ./ eps_val
                 end
             end
         end
@@ -155,7 +156,7 @@ function affine(dp::dynamic_problemSampled, s0::T;
         do_more_iteration = Finished_iteration < dp.affineinteration
     end
     
-    return mus, s0::T, sol, p, Niteration, norm_err
+    return mus, s0, sol, p, Niteration, norm_err
 end
 
 function affine(dp::dynamic_problemSampled; p=dp.Problem.p, kwargs...)

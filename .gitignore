@@ -6,6 +6,7 @@
 *.svg
 
 # Julia project files
+Manifest.toml
 docs/build/
 deps/
 test/build/
