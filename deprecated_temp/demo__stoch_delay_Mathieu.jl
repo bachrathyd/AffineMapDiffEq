@@ -72,7 +72,7 @@ lines!(ax_time, mathieu_sol.t, [u[1] for u in mathieu_sol.u], color=:blue, linew
 
 # Extract steady-state periodic orbit (last period)
 t_end = mathieu_sol.t[end]
-t_orbit = range(t_end - T, t_end, length=200)
+t_orbit = range(t_end - τ, t_end, length=2000)
 sol_steady = [mathieu_sol(t) for t in t_orbit]
 lines!(ax_orbit, getindex.(sol_steady, 1), getindex.(sol_steady, 2), color=:blue, linewidth=3, label="Long Sim (Steady State)")
 

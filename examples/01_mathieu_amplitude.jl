@@ -13,7 +13,6 @@ using MDBM
 
 # 1. Define the Governing Equation (In-place)
 function DelayMathieu!(du, u, h, p, t)
-(du, u, h, p, t)
     ζ, δ, ϵ, b, τ, T = p
     F = 0.1 * (cos(2π * t / T)^10)
     du[1] = u[2]
@@ -36,8 +35,8 @@ ax_orbit = GLMakie.Axis(fig[2, 1], title="Periodic Orbit Comparison", xlabel="x"
 ax_complex = GLMakie.Axis(fig[2, 2], title="Floquet Multipliers (Complex Plane)", xlabel="Re(μ)", ylabel="Im(μ)", aspect=GLMakie.DataAspect())
 
 # 4. Long Simulation
-u0 =  [1.0, 0.0]
-h(p, t) =  [0.0, 0.0]
+u0 = @MArray [1.0, 0.0]
+h(p, t) = @MArray [0.0, 0.0]
 prob_long = DDEProblem{true}(DelayMathieu!, u0, h, (0.0, T * 200.0), p_init; constant_lags=[τ])
 Solver_args = Dict(:alg => MethodOfSteps(Tsit5()), :verbose => false, :reltol => 1e-6)
 
@@ -140,7 +139,7 @@ Colorbar(fig_chart[2, 1], hm1, vertical=false, label="log10(Amplitude)")
 Spec_sat = copy(Spec_chart)
 Spec_sat[Spec_sat.>1.0] .= 1.0
 hm2 = heatmap!(ax_rho, δv, ϵv, log.(Spec_sat'), colormap=:inferno)
-scatter!(ax_rho, x_mdbm, y_mdbm, color=:black, markersize=2)
+scatter!(ax_rho, x_mdbm, y_mdbm, color=:black, markersize=4)
 Colorbar(fig_chart[2, 2], hm2, vertical=false, label="log(ρ)")
 
 save("examples/01_mathieu_stability_chart.png", fig_chart)
