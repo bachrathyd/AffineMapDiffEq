@@ -1,3 +1,6 @@
+# Example 04: Profiling Mapping Iterations
+# Deep-dive into solver and mapping bottlenecks
+
 using Pkg
 Pkg.activate(".")
 using AffineMapDiffEq
@@ -16,26 +19,35 @@ function Mathieu_IIP_Vector(du, u, h, p, t)
 end
 
 p = (0.02, 1.5, 0.15, 0.5, 2π, 2π)
+#p = (0.02, 1.5, 0.15, 0, 2π, 2π)#no delay
 τ = 2π
 u0 = [1.0, 0.0]
 h(p, t) = [0.0, 0.0]
-prob = DDEProblem{true}(Mathieu_IIP_Vector, u0, h, (0.0, 2π), p; constant_lags=[τ])
+prob = DDEProblem{true}(Mathieu_IIP_Vector, u0, h, (0.0, 2π + 0.0001), p; constant_lags=[τ])
 
-Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-8)
+Solver_args = Dict(:alg => MethodOfSteps(BS3()), :verbose => false, :reltol => 1e-3)
 Krylov_arg = (5, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=15, verbosity=0))
 
-dp = dynamic_problemSampled(prob, Solver_args, 2π; 
-                            Historyresolution=100, zerofixpont=false, 
-                            affineinteration=1, Krylov_arg=Krylov_arg)
+dp = dynamic_problemSampled(prob, Solver_args, 2π;
+    Historyresolution=100, zerofixpont=false,
+    affineinteration=1, Krylov_arg=Krylov_arg)
 
 println("Warming up...")
 affine(dp; p=p)
+@time for i in 1:100
+    affine(dp; p=p)
+end
 
 println("Profiling...")
 Profile.clear()
-@profile for i in 1:10
+@profile for i in 1:100
     affine(dp; p=p)
 end
 
 # Save profile data for analysis (ProfileView is interactive, so we'll use a text-based summary here)
 Profile.print(format=:flat, sortedby=:count, mincount=100)
+
+
+@profview for i in 1:100
+    affine(dp; p=p)
+end

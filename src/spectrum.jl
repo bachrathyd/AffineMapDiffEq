@@ -60,7 +60,7 @@ end
 Internal Subspace Iteration (ISSI) based eigen analysis.
 Optimized to avoid unnecessary allocations.
 """
-function issi_eigen(f, s_start::T, Neig; max_iter=12) where {T}
+function issi_eigen(f, s_start::T, Neig; max_iter=5) where {T}
     Nstep = length(s_start)
     s0 = map(x -> zero(x), s_start)
     v0 = f(s0)

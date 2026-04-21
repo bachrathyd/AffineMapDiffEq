@@ -6,7 +6,7 @@
 A structure containing all parameters and configurations for the sampled dynamic problem,
 including the underlying DDE problem, solver arguments, and mapping settings.
 """
-mutable struct dynamic_problemSampled{P,A,T,ST,K,IT}
+struct dynamic_problemSampled{P,A,T,ST,K,IT}
     Problem::P             # DDEProblem (e.g., DDEProblem(....))
     alg::A                 # Solver options (e.g., Dict(:alg => MethodOfSteps(BS3())))
     maxdelay::T            # Maximum delay time

@@ -1,3 +1,6 @@
+# Example 05: Perturbation and Accuracy Analysis
+# Comparing ForwardDiff (Exact) vs. Finite Difference fallback
+
 using AffineMapDiffEq
 using DifferentialEquations
 using StaticArrays

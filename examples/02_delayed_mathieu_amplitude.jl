@@ -1,5 +1,5 @@
-# Example 01: (Non-Delayed) Mathieu Equation - Stability and Amplitude Analysis
-# Unified interface testing: Handling ODEProblem with Historyresolution=1
+# Example 02: Delayed Mathieu Equation - Stability and Amplitude Analysis
+# Structured Visualization: Time Series, Periodic Orbit, and Spectrum
 
 using Pkg;
 Pkg.activate(".");
@@ -11,34 +11,34 @@ using KrylovKit
 using GLMakie
 using MDBM
 
-# 1. Define the Governing Equation (In-place ODE version)
-function Mathieu_ODE!(du, u, p, t)
+# 1. Define the Governing Equation (In-place)
+function DelayMathieu!(du, u, h, p, t)
     ζ, δ, ϵ, b, τ, T = p
     F = 0.1 * (cos(2π * t / T)^10)
     du[1] = u[2]
-    du[2] = -(δ + ϵ * cos(2π * t / T)) * u[1] - 2ζ * u[2] + F
-    # Note: 'b' and 'τ' are present in 'p' for compatibility but unused here
+    du[2] = -(δ + ϵ * cos(2π * t / T)) * u[1] - 2ζ * u[2] + b * h(p, t - τ)[1] + F
 end
 
 # 2. Setup Parameters
 ζ = 0.02
 δ_init = 1.5
 ϵ_init = 0.15
-τ = 0.0 # No delay
-b = 0.0 # No delay feedback
+τ = 2π
+b = 0.5
 T = 2π
 p_init = (ζ, δ_init, ϵ_init, b, τ, T)
 
 # 3. Create Figure Layout
 fig = Figure(size=(1200, 900))
-ax_time = GLMakie.Axis(fig[1, 1:2], title="Long Simulation Time Series (ODE)", xlabel="Time (t)", ylabel="x(t)")
-ax_orbit = GLMakie.Axis(fig[2, 1], title="Periodic Orbit Comparison (ODE)", xlabel="x", ylabel="dx/dt")
-ax_complex = GLMakie.Axis(fig[2, 2], title="Floquet Multipliers (ODE Complex Plane)", xlabel="Re(μ)", ylabel="Im(μ)", aspect=GLMakie.DataAspect())
+ax_time = GLMakie.Axis(fig[1, 1:2], title="Long Simulation Time Series", xlabel="Time (t)", ylabel="x(t)")
+ax_orbit = GLMakie.Axis(fig[2, 1], title="Periodic Orbit Comparison", xlabel="x", ylabel="dx/dt")
+ax_complex = GLMakie.Axis(fig[2, 2], title="Floquet Multipliers (Complex Plane)", xlabel="Re(μ)", ylabel="Im(μ)", aspect=GLMakie.DataAspect())
 
 # 4. Long Simulation
 u0 = @MArray [1.0, 0.0]
-prob_long = ODEProblem(Mathieu_ODE!, u0, (0.0, T * 200.0), p_init)
-Solver_args = Dict(:alg => Tsit5(), :verbose => false, :reltol => 1e-6)
+h(p, t) = @MArray [0.0, 0.0]
+prob_long = DDEProblem{true}(DelayMathieu!, u0, h, (0.0, T * 200.0), p_init; constant_lags=[τ])
+Solver_args = Dict(:alg => MethodOfSteps(Tsit5()), :verbose => false, :reltol => 1e-6)
 
 println("Running long simulation...")
 @time sol_long = solve(prob_long; Solver_args...)
@@ -52,66 +52,72 @@ t_orbit = range(t_end - T, t_end, length=200)
 sol_steady = [sol_long(t) for t in t_orbit]
 lines!(ax_orbit, getindex.(sol_steady, 1), getindex.(sol_steady, 2), color=:blue, linewidth=3, label="Long Sim (Steady State)")
 
-display(fig)
+display(fig) # Show intermediate progress
 
-# 5. Affine Mapping Analysis (ODE Case)
-println("Calculating Affine results for ODE...")
-Neig = 2 
-Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-15, krylovdim=Neig * 2 + 2, verbosity=0))
-probMapping = ODEProblem(Mathieu_ODE!, u0, (0.0, T), p_init)
+# 5. Affine Mapping Analysis
+println("Calculating Affine results...")
+Neig = 6#number of required eigen values
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-15, krylovdim=Neig * 2 + 2, verbosity=0, maxiter=10))
 
-# The constructor should automatically handle ODEProblem and set Historyresolution=1
-dpMathieu = dynamic_problemSampled(probMapping, Solver_args, 0.0;
-    zerofixpont=false, affineinteration=2, Krylov_arg=Krylov_arg)
+probMapping = DDEProblem{true}(DelayMathieu!, u0, h, (0.0, T), p_init; constant_lags=[τ])
+
+dpMathieu = dynamic_problemSampled(probMapping, Solver_args, τ;
+    Historyresolution=100, zerofixpont=false, affineinteration=2, Krylov_arg=Krylov_arg)
 
 @time mus, saff, sol0 = affine(dpMathieu; p=p_init);
 mu_vals = mus[1]
-# Finding the corresponding periodic solution of the fixed point
-sol0 = solve(remake(probMapping,u0=saff[1]);Solver_args...)
+
+#@code_warntype  affine(dpMathieu; p=p_init);
 
 # Plot Affine Fixed Point (Bottom Left)
-# For res=1, saff is a vector containing one state vector.
+lines!(ax_orbit, getindex.(saff, 1), getindex.(saff, 2), color=:red, linestyle=:dash, linewidth=2, label="Affine Fixed Point")
+scatter!(ax_orbit, getindex.(saff, 1), getindex.(saff, 2), color=:red, markersize=6)
+
 lines!(ax_orbit, [u[1] for u in sol0.u], [u[2] for u in sol0.u], color=:magenta, linewidth=1, label="Affine Periodic Orbit")
-scatter!(ax_orbit, [saff[1][1]], [saff[1][2]], color=:red, markersize=12, label="Fixed Point (T)")
 axislegend(ax_orbit)
 
 # Plot Complex Plane (Bottom Right)
+# Unit Circle
 θ = range(0, 2π, length=100)
 lines!(ax_complex, cos.(θ), sin.(θ), color=:black, linestyle=:dash)
+# Multipliers
 scatter!(ax_complex, real.(mu_vals), imag.(mu_vals), color=:red, markersize=10, label="μ")
 vlines!(ax_complex, [0], color=:gray, linewidth=0.5)
 hlines!(ax_complex, [0], color=:gray, linewidth=0.5)
 
 display(fig)
-save("examples/01_non_delayed_analysis.png", fig)
+save("examples/02_mathieu_analysis.png", fig)
 
-## 6. Stability Chart (ODE)
-println("Starting Stability Chart analysis...")
+## 6. Stability Chart (Brute Force + MDBM Overlay)
+println("Starting Stability Chart analysis...\nBrue-Force:")
 δv = LinRange(-1.0, 5.0, 60)
 ϵv = LinRange(-0.001, 10.0, 61)
+b_chart = 0.05
 Spec_chart = zeros(length(ϵv), length(δv))
 Amp_chart = zeros(length(ϵv), length(δv))
 
-# Fast settings for chart
-# Note: For ODE, Historyresolution defaults to 1
-dp_fast = dynamic_problemSampled(probMapping, Solver_args, 0.0;
-    zerofixpont=false, affineinteration=1, Krylov_arg=Krylov_arg)
+
+Neig = 2#number of required eigen values
+Krylov_arg = (Neig, :LM, KrylovKit.Arnoldi(tol=1e-12, krylovdim=Neig + 10, verbosity=0, maxiter=10));
+dp_fast = dynamic_problemSampled(probMapping, Solver_args, τ;
+    Historyresolution=25, zerofixpont=false, affineinteration=1, Krylov_arg=Krylov_arg)
 
 @time Threads.@threads for j in 1:length(δv)
     δ_v = δv[j]
     for i in 1:length(ϵv)
         ϵ_v = ϵv[i]
-        mu_loc, s0_loc, _ = affine(dp_fast; p=(ζ, δ_v, ϵ_v, 0.0, 0.0, T))
+        mu_loc, s0_loc, _ = affine(dp_fast; p=(ζ, δ_v, ϵ_v, b_chart, τ, T))
         Spec_chart[i, j] = maximum(abs.(mu_loc[1]))
-        Amp_chart[i, j] = norm(s0_loc[1]) # norm of the fixed point
+        Amp_chart[i, j] = norm(getindex.(s0_loc, 1))
     end
 end
 
-println("MDBM calculation (ODE)...")
+println("MDBM calculation...")
+
 δv_mdbm = LinRange(-1.0, 5.0, 10)
 ϵv_mdbm = LinRange(-0.001, 10.0, 11)
 function foo_stab(δ_loc, ϵ_loc)
-    return log(spectralradius(dp_fast; p=(ζ, δ_loc, ϵ_loc, 0.0, 0.0, T)))
+    return log(spectralradius(dp_fast; p=(ζ, δ_loc, ϵ_loc, b_chart, τ, T)))
 end
 mymdbm = MDBM_Problem(foo_stab, [MDBM.Axis(δv_mdbm, "δ"), MDBM.Axis(ϵv_mdbm, "ϵ")])
 @time MDBM.solve!(mymdbm, 4, interpolationorder=0, verbosity=0)
@@ -120,8 +126,8 @@ x_mdbm, y_mdbm = getinterpolatedsolution(mymdbm)
 
 # Final Stability Chart Figure
 fig_chart = Figure(size=(1200, 600))
-ax_amp = GLMakie.Axis(fig_chart[1, 1], title="Amplitude + MDBM Boundary (ODE)", xlabel="δ", ylabel="ϵ")
-ax_rho = GLMakie.Axis(fig_chart[1, 2], title="Spectral Radius + MDBM Boundary (ODE)", xlabel="δ", ylabel="ϵ")
+ax_amp = GLMakie.Axis(fig_chart[1, 1], title="Amplitude + MDBM Boundary", xlabel="δ", ylabel="ϵ")
+ax_rho = GLMakie.Axis(fig_chart[1, 2], title="Spectral Radius + MDBM Boundary", xlabel="δ", ylabel="ϵ")
 
 # Mask unstable regions for amplitude
 Amp_masked = copy(Amp_chart)
@@ -137,7 +143,7 @@ hm2 = heatmap!(ax_rho, δv, ϵv, log.(Spec_sat'), colormap=:inferno)
 scatter!(ax_rho, x_mdbm, y_mdbm, color=:black, markersize=4)
 Colorbar(fig_chart[2, 2], hm2, vertical=false, label="log(ρ)")
 
-save("examples/01_non_delayed_stability_chart.png", fig_chart)
+save("examples/02_mathieu_stability_chart.png", fig_chart)
 display(fig_chart)
 
 println("Analysis complete. Figures saved.")

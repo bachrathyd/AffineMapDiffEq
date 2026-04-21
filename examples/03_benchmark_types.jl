@@ -1,3 +1,6 @@
+# Example 03: Benchmarking Mapping Performance with Different State Types
+# Investigating StaticArrays vs. Mutating Vectors vs. Dual Numbers
+
 using Pkg
 Pkg.activate(".")
 using AffineMapDiffEq
