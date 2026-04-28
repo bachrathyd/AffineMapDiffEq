@@ -20,13 +20,13 @@ function DelayMathieu!(du, u, h, p, t)
 end
 
 # 2. Setup Parameters
-ζ = 0.02
-δ_init = 1.5
-ϵ_init = 0.15
-τ = 2π
-b = 0.5
-T = 2π
-p_init = (ζ, δ_init, ϵ_init, b, τ, T)
+const ζ =0.01
+const δ_init = 1.5
+const ϵ_init = 0.15
+const τ = 2π
+const b = 0.05
+const T = 2π
+const p_init = (ζ, δ_init, ϵ_init, b, τ, T)
 
 # 3. Create Figure Layout
 fig = Figure(size=(1200, 900))
@@ -64,6 +64,8 @@ probMapping = DDEProblem{true}(DelayMathieu!, u0, h, (0.0, T), p_init; constant_
 dpMathieu = dynamic_problemSampled(probMapping, Solver_args, τ;
     Historyresolution=100, zerofixpont=false, affineinteration=2, Krylov_arg=Krylov_arg)
 
+#Warm up"
+@time mus, saff, sol0 = affine(dpMathieu; p=p_init);
 @time mus, saff, sol0 = affine(dpMathieu; p=p_init);
 mu_vals = mus[1]
 
@@ -90,9 +92,9 @@ save("examples/02_mathieu_analysis.png", fig)
 
 ## 6. Stability Chart (Brute Force + MDBM Overlay)
 println("Starting Stability Chart analysis...\nBrue-Force:")
-δv = LinRange(-1.0, 5.0, 60)
-ϵv = LinRange(-0.001, 10.0, 61)
-b_chart = 0.05
+const δv = LinRange(-1.0, 5.0, 60)
+const ϵv = LinRange(-0.001, 5.0, 61)
+const b_chart = 0.05
 Spec_chart = zeros(length(ϵv), length(δv))
 Amp_chart = zeros(length(ϵv), length(δv))
 

@@ -86,7 +86,7 @@ function LinMap(dp::dynamic_problemSampled, s::T; p=dp.Problem.p)::Tuple{T, ODES
         save_times = StateSmaplingTime .+ T_period
         
         # Overwrite/add saveat and force save_everystep=false for maximum efficiency.
-        sol = solve(new_prob; dp.alg..., saveat=save_times, save_everystep=false)
+        sol = solve(new_prob; dp.alg..., saveat=save_times, save_everystep=false,dense=false)
         
         tend = sol.t[end]
         if tend >= T_period && length(sol.u) >= length(save_times)

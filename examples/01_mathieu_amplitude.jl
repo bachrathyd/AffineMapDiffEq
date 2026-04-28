@@ -21,13 +21,13 @@ function Mathieu_ODE!(du, u, p, t)
 end
 
 # 2. Setup Parameters
-ζ = 0.02
-δ_init = 1.5
-ϵ_init = 0.15
-τ = 0.0 # No delay
-b = 0.0 # No delay feedback
-T = 2π
-p_init = (ζ, δ_init, ϵ_init, b, τ, T)
+const ζ = 0.02
+const δ_init = 1.5
+const ϵ_init = 0.15
+const τ = 0.0 # No delay
+const b = 0.0 # No delay feedback
+const T = 2π
+const p_init = (ζ, δ_init, ϵ_init, b, τ, T)
 
 # 3. Create Figure Layout
 fig = Figure(size=(1200, 900))
@@ -64,7 +64,7 @@ probMapping = ODEProblem(Mathieu_ODE!, u0, (0.0, T), p_init)
 dpMathieu = dynamic_problemSampled(probMapping, Solver_args, 0.0;
     zerofixpont=false, affineinteration=2, Krylov_arg=Krylov_arg)
 
-@time mus, saff, sol0 = affine(dpMathieu; p=p_init);
+@time mus, saff, sol0 = affine(dpMathieu; p= p_init);
 mu_vals = mus[1]
 # Finding the corresponding periodic solution of the fixed point
 sol0 = solve(remake(probMapping,u0=saff[1]);Solver_args...)
@@ -87,8 +87,8 @@ save("examples/01_non_delayed_analysis.png", fig)
 
 ## 6. Stability Chart (ODE)
 println("Starting Stability Chart analysis...")
-δv = LinRange(-1.0, 5.0, 60)
-ϵv = LinRange(-0.001, 10.0, 61)
+const δv = LinRange(-1.0, 5.0, 100)
+const ϵv = LinRange(-0.001, 10.0, 101)
 Spec_chart = zeros(length(ϵv), length(δv))
 Amp_chart = zeros(length(ϵv), length(δv))
 
@@ -134,7 +134,7 @@ Colorbar(fig_chart[2, 1], hm1, vertical=false, label="log10(Amplitude)")
 Spec_sat = copy(Spec_chart)
 Spec_sat[Spec_sat.>1.0] .= 1.0
 hm2 = heatmap!(ax_rho, δv, ϵv, log.(Spec_sat'), colormap=:inferno)
-scatter!(ax_rho, x_mdbm, y_mdbm, color=:black, markersize=4)
+scatter!(ax_rho, x_mdbm, y_mdbm, color=:red, markersize=4)
 Colorbar(fig_chart[2, 2], hm2, vertical=false, label="log(ρ)")
 
 save("examples/01_non_delayed_stability_chart.png", fig_chart)
