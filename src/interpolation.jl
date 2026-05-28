@@ -43,12 +43,14 @@ Analyzes the input state sequence and constructs an appropriate `AffineHistory` 
 function construct_history(s::T, StateSmaplingTime; itp_type=DEFAULT_ITP) where {T}
     if eltype(s) <: AbstractVector && !(eltype(s) <: StaticArray)
         s_mat = reduce(hcat, s)
-        itp = interpolate(s_mat, (NoInterp(), itp_type))
+        itp  = interpolate(s_mat, (NoInterp(), itp_type))
         sitp = scale(itp, 1:size(s_mat, 1), StateSmaplingTime)
-        return AffineHistory{typeof(sitp), eltype(s)}(sitp, true, size(s_mat, 1))
+        etp  = extrapolate(sitp, Flat())   # clamp to boundary for t slightly out of range
+        return AffineHistory{typeof(etp), eltype(s)}(etp, true, size(s_mat, 1))
     else
-        itp = interpolate(s, itp_type)
+        itp  = interpolate(s, itp_type)
         sitp = scale(itp, StateSmaplingTime)
-        return AffineHistory{typeof(sitp), eltype(s)}(sitp, false, 0)
+        etp  = extrapolate(sitp, Flat())   # clamp to boundary for t slightly out of range
+        return AffineHistory{typeof(etp), eltype(s)}(etp, false, 0)
     end
 end
