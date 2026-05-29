@@ -10,6 +10,42 @@
 using LinearAlgebra
 using ForwardDiff
 
+# ─── Watchdog: kill stalled computations ──────────────────────────────────────
+
+"""
+    with_timeout(f, timeout_s; default=nothing) -> (result, status)
+
+Run `f()` in an async task. If it completes within `timeout_s` seconds, return
+`(result, :ok)`. If it times out, send `InterruptException` to the task and
+return `(default, :timeout)`.
+
+Usage inside a threaded sweep:
+    val, st = with_timeout(60.0) do
+        robustness_margin(dp, p_loc, delta_p; verbose=false)
+    end
+    st === :timeout && continue   # skip stalled grid point
+"""
+function with_timeout(f, timeout_s::Real; default=nothing)
+    result  = Ref{Any}(default)
+    done    = Ref(false)
+    task    = @async begin
+        try
+            result[] = f()
+        catch
+        end
+        done[] = true
+    end
+    deadline = time() + timeout_s
+    while !done[] && time() < deadline
+        sleep(0.05)
+    end
+    if !done[]
+        try; Base.throwto(task, InterruptException()); catch; end
+        return default, :timeout
+    end
+    return result[], :ok
+end
+
 # ─── Root Tracking ────────────────────────────────────────────────────────────
 
 """
@@ -72,17 +108,20 @@ end
 # from the slightly inaccurate Krylov |μ|. Accuracy improves with the Schur
 # subspace size (Neig); see compute_sensitivities_dual.
 
-# Tag for the outer (parameter) Dual layer. Distinct from `AffineTag` used inside
-# the mapping for the Jacobian action, so the two Dual layers never mix.
-struct SensTag end
+# Tag for the first-order (inner) parameter Dual layer.
+struct SensTag  end
+# Tag for the second-order (middle) parameter Dual layer — only used when
+# computing the Hessian of |μ| via nested ForwardDiff.
+struct SensTag2 end
 
-# Nesting order for the two Dual layers. `partialpart` (inside the mapping) strips
-# the OUTERMOST tag to extract the Jacobian-action direction, so `AffineTag` must
-# be the outer layer and the parameter-sensitivity `SensTag` the inner one — then
-# stripping AffineTag leaves the SensTag (parameter) derivative intact. ForwardDiff
-# needs this precedence to combine the two tags without an "ordering" error.
-ForwardDiff.:≺(::Type{SensTag}, ::Type{AffineMapDiffEq.AffineTag}) = true
-ForwardDiff.:≺(::Type{AffineMapDiffEq.AffineTag}, ::Type{SensTag}) = false
+# Tag precedence (outermost → innermost):  AffineTag > SensTag2 > SensTag
+# `partialpart` strips the OUTERMOST tag; AffineTag must therefore be outermost.
+ForwardDiff.:≺(::Type{SensTag},  ::Type{AffineMapDiffEq.AffineTag}) = true
+ForwardDiff.:≺(::Type{AffineMapDiffEq.AffineTag}, ::Type{SensTag})  = false
+ForwardDiff.:≺(::Type{SensTag2}, ::Type{AffineMapDiffEq.AffineTag}) = true
+ForwardDiff.:≺(::Type{AffineMapDiffEq.AffineTag}, ::Type{SensTag2}) = false
+ForwardDiff.:≺(::Type{SensTag},  ::Type{SensTag2}) = true   # SensTag is innermost
+ForwardDiff.:≺(::Type{SensTag2}, ::Type{SensTag})  = false
 
 # Action of the linearized period map M = ∂F/∂s at the (Float64) fixed point
 # `s_lin` on a (Float64) direction `ds`, with Dual-valued parameters `p_dual`.
@@ -271,34 +310,238 @@ function compute_sensitivities_dual(dp,
     return sens
 end
 
+# ─── Second-Order Sensitivity: Hessian of |μ| ────────────────────────────────
+
+"""
+    compute_second_order_sens(dp, p_nominal, delta_p, mu_nominal, s_nominal, eigvecs)
+        -> (sens1, hess_mu, mu_complex_grad)
+
+Compute the **gradient** and **Hessian** of `|μ_j|` w.r.t. the parameters using a
+single nested-ForwardDiff pass (no FD, no extra affine calls beyond the `nb`
+LinMap evaluations already needed for the first-order sensitivity).
+
+Returns:
+- `sens1[j,i]`      = ∂|μ_j|/∂p_i       (same as `compute_sensitivities_dual`)
+- `hess_mu[j,i,k]`  = ∂²|μ_j|/∂p_i∂p_k  (Hessian, symmetric Float64 tensor)
+- `d1[j,i]`         = ∂μ_j/∂p_i          (complex 1st-order eigenvalue derivative)
+
+**Method (see `docs/second_order_sensitivity_theory.md`):**
+1. Seed `p` as `Dual{SensTag2, Dual{SensTag, Float64, n}, n}` — outer SensTag2
+   carries ∂/∂p_k, inner SensTag carries ∂/∂p_i.
+2. One `_linmap_action_dual` pass with the three-layer nested Dual gives the
+   compressed matrix `H̃[a,b]` containing value, ∂H/∂p_i, and ∂²H/∂p_i∂p_k.
+3. First-order eigenvalue derivatives from `(Lᵀ H₁⁽ⁱ⁾ R)_mm`.
+4. Second-order eigenvalue derivatives from second-order perturbation theory:
+       d_ik = (Lᵀ H₂⁽ⁱᵏ⁾ R)_mm + Σ_{l≠m} (Lᵀ H₁⁽ⁱ⁾ R)_ml (Lᵀ H₁⁽ᵏ⁾ R)_lm / (λ_m - λ_l)
+5. Hessian of |μ_m| from the chain rule.
+
+Cost: `nb` LinMap calls with O(n²) Dual arithmetic — about `n = n_active` times
+more expensive than the first-order pass for the same `nb`.
+"""
+function compute_second_order_sens(dp,
+                                    p_nominal::Tuple,
+                                    delta_p::Tuple,
+                                    mu_nominal::AbstractVector{<:Complex},
+                                    s_nominal,
+                                    eigvecs)
+    n_params = length(p_nominal)
+    n_mu     = length(mu_nominal)
+    p_vec    = collect(Float64, p_nominal)
+    nb       = length(eigvecs)
+
+    active   = Int[i for i in 1:n_params if !iszero(delta_p[i])]
+    n_active = length(active)
+
+    sens1    = zeros(Float64,    n_mu, n_params)
+    hess_mu  = zeros(Float64,    n_mu, n_params, n_params)
+    d1       = zeros(ComplexF64, n_mu, n_params)   # complex 1st-order eigenvalue deriv
+
+    n_active == 0 && return sens1, hess_mu, d1
+
+    # ── Nested Dual seeding ─────────────────────────────────────────────────
+    DualT1  = ForwardDiff.Dual{SensTag,  Float64, n_active}
+    DualT2  = ForwardDiff.Dual{SensTag2, DualT1,  n_active}
+    zp1     = ForwardDiff.Partials(ntuple(_ -> 0.0,       n_active))
+    zero_D1 = DualT1(0.0, zp1)
+    zp2     = ForwardDiff.Partials(ntuple(_ -> zero_D1,   n_active))
+    one_D1  = DualT1(1.0, zp1)
+
+    p_dual = ntuple(n_params) do j
+        idx = findfirst(==(j), active)
+        if idx === nothing
+            DualT2(DualT1(p_vec[j], zp1), zp2)
+        else
+            inner = DualT1(p_vec[j],
+                ForwardDiff.Partials(ntuple(i -> i == idx ? 1.0 : 0.0, n_active)))
+            outer = ForwardDiff.Partials(
+                ntuple(k -> k == idx ? one_D1 : zero_D1, n_active))
+            DualT2(inner, outer)
+        end
+    end
+
+    # AffineTag seed on top of the nested Dual (so partialpart strips AffineTag)
+    one_eps = ForwardDiff.Dual{AffineMapDiffEq.AffineTag, DualT2, 1}(
+        DualT2(DualT1(0.0, zp1), zp2),
+        ForwardDiff.Partials((DualT2(DualT1(1.0, zp1), zp2),)))
+
+    # ── Compressed matrix with nested Duals ────────────────────────────────
+    Q   = eigvecs
+    MQ  = [_linmap_action_dual(dp, s_nominal, Q[b], p_dual, one_eps) for b in 1:nb]
+    Hd  = [dot(Q[a], MQ[b]) for a in 1:nb, b in 1:nb]
+
+    # ── Extract H0, H1, H2 tensors ─────────────────────────────────────────
+    # H0[a,b]       = nominal compressed matrix  (ComplexF64)
+    # H1[a,b,k_idx] = ∂H[a,b]/∂p_active[k_idx]  (ComplexF64)
+    # H2[a,b,i_idx,k_idx] = ∂²H[a,b]/∂p_i∂p_k  (ComplexF64)
+    H0 = [ComplexF64(ForwardDiff.value(ForwardDiff.value(Hd[a,b])))
+          for a in 1:nb, b in 1:nb]
+    H1 = [ComplexF64(ForwardDiff.partials(ForwardDiff.value(Hd[a,b]))[i_idx])
+          for a in 1:nb, b in 1:nb, i_idx in 1:n_active]
+    H2 = [ComplexF64(ForwardDiff.partials(ForwardDiff.partials(Hd[a,b])[k_idx])[i_idx])
+          for a in 1:nb, b in 1:nb, i_idx in 1:n_active, k_idx in 1:n_active]
+
+    # ── Eigenproblem on H0 ──────────────────────────────────────────────────
+    F   = eigen(H0)
+    λ   = F.values       # nb eigenvalues
+    R   = F.vectors      # right eigenvectors as columns
+    Lt  = inv(R)         # rows = left eigenvectors (Lᵀ·R = I)
+
+    # M1[i_idx][a,b] = (Lᵀ H₁⁽ⁱ⁾ R)[a,b]  for active param index i_idx
+    M1 = [Lt * H1[:,:,i_idx] * R for i_idx in 1:n_active]
+    # M2[i_idx,k_idx][a,b] = (Lᵀ H₂⁽ⁱᵏ⁾ R)[a,b]
+    M2 = [Lt * H2[:,:,i_idx,k_idx] * R for i_idx in 1:n_active, k_idx in 1:n_active]
+
+    # ── Match compressed eigenmodes to nominal multiplier ordering ──────────
+    used   = falses(nb)
+    mode_map = zeros(Int, n_mu)   # mode_map[j] = index m in compressed system
+    for j in 1:n_mu
+        best_m, best_d2 = 0, Inf
+        for m in 1:nb
+            used[m] && continue
+            d2 = abs2(mu_nominal[j] - λ[m])
+            if d2 < best_d2; best_d2, best_m = d2, m; end
+        end
+        best_m == 0 && continue
+        used[best_m] = true
+        mode_map[j]  = best_m
+    end
+
+    # ── First-order gradient of |μ| ────────────────────────────────────────
+    for j in 1:n_mu
+        m  = mode_map[j]; m == 0 && continue
+        am = abs(λ[m])
+        am < eps(Float64) && continue
+        for (i_idx, i) in enumerate(active)
+            d_i         = M1[i_idx][m, m]           # complex ∂λ_m/∂p_i
+            d1[j, i]    = d_i
+            sens1[j, i] = real(conj(λ[m]) * d_i) / am
+        end
+    end
+
+    # ── Second-order Hessian of |μ| ────────────────────────────────────────
+    for j in 1:n_mu
+        m  = mode_map[j]; m == 0 && continue
+        am = abs(λ[m]);   am < eps(Float64) && continue
+
+        for (i_idx, i) in enumerate(active), (k_idx, k) in enumerate(active)
+            # 2nd-order eigenvalue perturbation theory (see theory doc)
+            d_ik = M2[i_idx, k_idx][m, m]
+            for l in 1:nb
+                l == m && continue
+                denom = λ[m] - λ[l]
+                abs(denom) < 1e-14 && continue
+                d_ik += M1[i_idx][m, l] * M1[k_idx][l, m] / denom
+            end
+
+            # Hessian of |λ_m| from chain rule
+            d_i = d1[j, i];  d_k = d1[j, k]
+            s_i = sens1[j, i]; s_k = sens1[j, k]
+            hess_mu[j, i, k] = (real(conj(d_k) * d_i + conj(λ[m]) * d_ik) / am
+                                 - s_i * s_k / am)
+        end
+    end
+
+    return sens1, hess_mu, d1
+end
+
+# ─── Worst-Case Second-Order Robustness Margin ────────────────────────────────
+
+"""
+    _solve_quadratic_C(rho, L1, L2) -> Float64
+
+Positive root of  ρ + C·L1 + C²/2·L2 = 1  (robustness margin under quadratic
+approximation of |μ| along a box vertex direction).
+
+Returns +Inf if the vertex is benign (L1 ≤ 0) or the approximation never
+reaches 1 in the positive-C half-line.
+"""
+@inline function _solve_quadratic_C(rho::Float64, L1::Float64, L2::Float64)::Float64
+    L1 <= 0.0 && return Inf       # vertex makes |μ| smaller — not a threat
+    disc = L1^2 - 2.0 * L2 * (rho - 1.0)  # = L1² + 2 L2 (1 - ρ)
+    if abs(L2) < 1e-14 * abs(L1)           # effectively linear
+        return (1.0 - rho) / L1
+    end
+    disc < 0.0 && return Inf      # quadratic never reaches 1 for any C > 0
+    return (-L1 + sqrt(disc)) / L2
+end
+
+"""
+    _worst_case_C_2nd(rho, g, H, b) -> Float64
+
+Second-order worst-case robustness margin for a single mode with modulus `rho`,
+gradient vector `g`, Hessian matrix `H`, and uncertainty half-widths `b`.
+
+Checks all `2^n` vertices of the box `|Δp_i| ≤ b_i` and returns the smallest
+positive C that drives |μ| to 1 under the quadratic approximation.
+
+For `n ≤ 6` the vertex enumeration is negligible.
+"""
+function _worst_case_C_2nd(rho::Float64,
+                            g::AbstractVector{Float64},
+                            H::AbstractMatrix{Float64},
+                            b::AbstractVector{Float64})::Float64
+    n  = length(g)
+    Hb = H .* (b * b')    # H scaled by b_i b_k (so we only multiply signs)
+    Cmin = Inf
+    for bits in 0:(1 << n - 1)
+        v  = ntuple(i -> isodd(bits >> (i-1)) ? -1.0 : 1.0, n)
+        L1 = sum(g[i] * b[i] * v[i] for i in 1:n)
+        L2 = sum(Hb[i,k] * v[i] * v[k] for i in 1:n, k in 1:n)
+        c  = _solve_quadratic_C(rho, L1, L2)
+        c < Cmin && (Cmin = c)
+    end
+    return Cmin
+end
+
 # ─── Robustness Margin ────────────────────────────────────────────────────────
 
 """
-    robustness_margin(dp, p_nominal, delta_p; n_mu, delta_rel)
+    robustness_margin(dp, p_nominal, delta_p; n_mu, delta_rel, sens_order, verbose)
         -> (C, C_vec, mu_nominal, sens)
 
-Worst-case linear robustness margin under bounded parameter uncertainty.
+Worst-case robustness margin under bounded parameter uncertainty.
 
-  C_j = (1 - |μ_j|) / Σ_i |∂|μ_j|/∂p_i| · Δp_i
-  C   = min_j C_j
+**`sens_order = 1`** (default) — linear approximation:
+  C_j = (1 - |μ_j|) / Σ_i |∂|μ_j|/∂p_i| · Δp_i   (worst vertex = sign of gradient)
+
+**`sens_order = 2`** — quadratic approximation:
+  Finds C by solving ρ + C·L₁(v*) + C²/2·L₂(v*) = 1 for the worst vertex v* among
+  all 2^n_active corners of the uncertainty box, using the Hessian ∂²|μ|/∂p_i∂p_k.
+  More accurate near curved stability boundaries; ~n_active× more expensive.
 
 Returns `(-Inf, ...)` if any |μ_j| ≥ 1 (unstable nominal point).
-Returns `Inf` for a root whose sensitivity denominator is numerically zero.
-
-The nominal `affine` call produces both the Floquet multipliers and the
-periodic-orbit fixed point, which is passed as a warm start to all
-subsequent perturbed evaluations.
 """
 function robustness_margin(dp,
                             p_nominal::Tuple,
                             delta_p::Tuple;
                             n_mu::Int          = dp.Krylov_arg[1],
                             delta_rel::Float64 = 1e-5,
+                            sens_order::Int    = 1,
                             verbose::Bool      = true)
-    # ── Nominal computation (also produces warm-start history s_nominal) ──
+    # ── Nominal affine call (warm-start + Krylov basis) ──────────────────────
     mus_nominal, s_nominal = affine(dp; p=p_nominal)
     all_mu     = ComplexF64.(mus_nominal[1])
-    n_eff      = min(n_mu, length(all_mu))   # Krylov may converge fewer than n_mu
+    n_eff      = min(n_mu, length(all_mu))
     mu_nominal = all_mu[1:n_eff]
     eigvecs    = mus_nominal[2]
     mu_abs     = abs.(mu_nominal)
@@ -308,23 +551,50 @@ function robustness_margin(dp,
         return -Inf, fill(-Inf, n_eff), mu_nominal, sens_empty
     end
 
-    # ── Sensitivities using s_nominal as warm start ──
-    if verbose
-        if dp.perturbation_size == 0.0
-            println("  Computing sensitivities (ForwardDiff on compressed operator)...")
-        else
-            println("  Computing sensitivities (central FD, $(2 * count(!iszero, delta_p)) affine calls)...")
-        end
-    end
-    sens      = compute_sensitivities(dp, p_nominal, delta_p, mu_nominal, s_nominal, eigvecs; delta_rel, verbose)
     delta_vec = collect(Float64, delta_p)
 
-    C_vec = map(eachindex(mu_nominal)) do j
-        denom = sum(abs(sens[j, i]) * delta_vec[i] for i in eachindex(delta_vec))
-        denom < eps(Float64) ? Inf : (1.0 - mu_abs[j]) / denom
-    end
+    # ── sens_order = 1: linear worst-case ────────────────────────────────────
+    if sens_order == 1
+        if verbose
+            if dp.perturbation_size == 0.0
+                println("  Computing sensitivities (ForwardDiff, order 1)...")
+            else
+                println("  Computing sensitivities (central FD, order 1)...")
+            end
+        end
+        sens  = compute_sensitivities(dp, p_nominal, delta_p, mu_nominal, s_nominal,
+                                      eigvecs; delta_rel, verbose)
+        C_vec = map(eachindex(mu_nominal)) do j
+            denom = sum(abs(sens[j, i]) * delta_vec[i] for i in eachindex(delta_vec))
+            denom < eps(Float64) ? Inf : (1.0 - mu_abs[j]) / denom
+        end
+        return minimum(C_vec), C_vec, mu_nominal, sens
 
-    return minimum(C_vec), C_vec, mu_nominal, sens
+    # ── sens_order = 2: quadratic worst-case (vertex check) ──────────────────
+    elseif sens_order == 2
+        verbose && println("  Computing sensitivities (ForwardDiff, order 2, Hessian)...")
+        # Second-order requires perturbation_size == 0 (Dual method only)
+        if dp.perturbation_size != 0.0
+            @warn "sens_order=2 requires perturbation_size=0.0 (Dual AD); falling back to order 1"
+            return robustness_margin(dp, p_nominal, delta_p; n_mu=n_mu,
+                                     delta_rel=delta_rel, sens_order=1, verbose=verbose)
+        end
+        sens1, hess, _ = compute_second_order_sens(dp, p_nominal, delta_p,
+                                                    mu_nominal, s_nominal, eigvecs)
+
+        # For each mode, find worst-case C over all vertices of the uncertainty box
+        C_vec = map(eachindex(mu_nominal)) do j
+            rho = mu_abs[j]
+            g   = sens1[j, :]              # gradient of |μ_j| w.r.t. all params
+            H   = hess[j, :, :]           # Hessian of |μ_j|
+            b   = delta_vec               # uncertainty half-widths
+            _worst_case_C_2nd(rho, g, H, b)
+        end
+        return minimum(C_vec), C_vec, mu_nominal, sens1
+
+    else
+        error("sens_order must be 1 or 2, got $sens_order")
+    end
 end
 
 # TODO: finalize it for controller optimization (Optim pkg is needed)

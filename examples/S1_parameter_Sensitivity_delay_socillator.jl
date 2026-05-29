@@ -16,23 +16,23 @@ using StaticArrays
 using DifferentialEquations
 using LinearAlgebra
 using KrylovKit
-using GLMakie
+using GLMakieno
 using MDBM
 
 ## ─── Resolution / fidelity parameters (edit here to switch between runs) ─────
 # HIGH-RESOLUTION (production)
-const RES_sweep_kp   = 110      # grid points along kp for the C-map sweep
-const RES_sweep_kd   = 100      # grid points along kd
-const RES_mdbm_seed  = 14       # MDBM coarse-grid size (each axis)
-const RES_mdbm_iter  = 6        # MDBM refinement iterations
-const RES_N_random   = 20       # random grey validation curves
+const RES_sweep_kp = 110      # grid points along kp for the C-map sweep
+const RES_sweep_kd = 100      # grid points along kd
+const RES_mdbm_seed = 14       # MDBM coarse-grid size (each axis)
+const RES_mdbm_iter = 6        # MDBM refinement iterations
+const RES_N_random = 20       # random grey validation curves
 
 # #  LOW-RESOLUTION (fast preview — uncomment to switch)
-#  const RES_sweep_kp   = 30
-#  const RES_sweep_kd   = 31
-#  const RES_mdbm_seed  = 10
-#  const RES_mdbm_iter  = 4
-#  const RES_N_random   = 5
+# const RES_sweep_kp = 30
+# const RES_sweep_kd = 31
+# const RES_mdbm_seed = 10
+# const RES_mdbm_iter = 4
+# const RES_N_random = 5
 
 ## ─────────────────────────────────────────────────────────────────────────────
 
@@ -40,19 +40,19 @@ const RES_N_random   = 20       # random grey validation curves
 function DelayPDOsc!(du, u, h, p, t)
     ζ, ω, kp, kd, τ, T = p
     hτ = h(p, t - τ)
-    F  = 0.1 * cos(2π * t / T)
+    F = 0.1 * cos(2π * t / T)
     du[1] = u[2]
     #Unstable with +ω^2, stable with -ω^2
-    du[2] = +ω^2 * u[1] - 2ζ*ω * u[2] - kp * hτ[1] - kd * hτ[2] + F
+    du[2] = +ω^2 * u[1] - 2ζ * ω * u[2] - kp * hτ[1] - kd * hτ[2] + F
 end
 
 # 2. Nominal parameters — mapping period locked to delay
-const ζ_nom  = -0.02 #unstable
-const ω_nom  = 1.0
+const ζ_nom = -0.02 #unstable
+const ω_nom = 1.0
 const kp_nom = 2.0
 const kd_nom = 2.0
-const τ_nom  = 0.5
-const T_nom  = τ_nom
+const τ_nom = 0.5
+const T_nom = τ_nom
 const p_init = (ζ_nom, ω_nom, kp_nom, kd_nom, τ_nom, T_nom)
 
 # 3. Affine mapping setup
@@ -79,20 +79,20 @@ println("Dominant |μ| at nominal: ", round(maximum(abs.(mus[1])); digits=6))
 include(joinpath(@__DIR__, "..", "src", "robust_control.jl"))
 
 # Predefined uncertainty ratios (as a ratio of the nominal values)
-const ζ_var  = 0.02
-const ω_var  = 0.02
+const ζ_var = 0.02
+const ω_var = 0.02
 const kp_var = 0.05
 const kd_var = 0.05
-const τ_var  = 0.02
-const T_var  = 0.03      # T is tied to τ in this study
+const τ_var = 0.02
+const T_var = 0.03      # T is tied to τ in this study
 
 # Nominal uncertainty box (absolute = ratio · |nominal|)
-const delta_p_nom = (ζ_var  * abs(ζ_nom),
-                     ω_var  * abs(ω_nom),
-                     kp_var * abs(kp_nom),
-                     kd_var * abs(kd_nom),
-                     τ_var  * abs(τ_nom),
-                     T_var  * abs(T_nom))
+const delta_p_nom = (ζ_var * abs(ζ_nom),
+    ω_var * abs(ω_nom),
+    kp_var * abs(kp_nom),
+    kd_var * abs(kd_nom),
+    τ_var * abs(τ_nom),
+    T_var * abs(T_nom))
 
 println("\nComputing robustness margin C at nominal parameters...")
 @time C, C_vec, mu_C, sens = robustness_margin(dpPD, p_init, delta_p_nom)
@@ -112,8 +112,8 @@ display(round.(sens; digits=4))
 
 println("\nStarting Robustness Map (threaded over (kp, kd))...")
 
-const kpv = LinRange(-1.5, 3.0, RES_sweep_kp)
-const kdv = LinRange(-1.0, 4.0, RES_sweep_kd)
+const kpv = LinRange(0.5, 4.0, RES_sweep_kp)
+const kdv = LinRange(-0.5, 4.0, RES_sweep_kd)
 
 # Two dynamic problems sharing the same discretization, differing only in the
 # sensitivity method used by robustness_margin:
@@ -163,12 +163,12 @@ function sweep_C_map!(dp, Cmap)
         for i in 1:length(kdv)
             kd_v = kdv[i]
             p_loc = (ζ_nom, ω_nom, kp_v, kd_v, τ_nom, T_nom)
-            delta_p_loc = (ζ_var  * abs(ζ_nom),
-                           ω_var  * abs(ω_nom),
-                           kp_var * abs(kp_v),
-                           kd_var * abs(kd_v),
-                           τ_var  * abs(τ_nom),
-                           T_var  * abs(T_nom))
+            delta_p_loc = (ζ_var * abs(ζ_nom),
+                ω_var * abs(ω_nom),
+                kp_var * abs(kp_v),
+                kd_var * abs(kd_v),
+                τ_var * abs(τ_nom),
+                T_var * abs(T_nom))
             C_loc, _, mu_loc, _ = robustness_margin(dp, p_loc, delta_p_loc; verbose=false)
             ρ = maximum(abs.(mu_loc))
             if isfinite(C_loc) && ρ < 1.0
@@ -180,43 +180,43 @@ function sweep_C_map!(dp, Cmap)
     return nothing
 end
 
-Spec_map   = zeros(length(kdv), length(kpv))
+Spec_map = zeros(length(kdv), length(kpv))
 C_map_dual = fill(NaN, length(kdv), length(kpv))
-C_map_fd   = fill(NaN, length(kdv), length(kpv))
+C_map_fd = fill(NaN, length(kdv), length(kpv))
 
 # Warm up all three branches before timing.
 println("  Warming up...")
 spectralradius(dp_spec; p=p_init)
 robustness_margin(dp_dual, p_init, delta_p_nom; verbose=false)
-robustness_margin(dp_fd,   p_init, delta_p_nom; verbose=false)
+robustness_margin(dp_fd, p_init, delta_p_nom; verbose=false)
 
 println("  Spectral radius sweep...")
 t_spec = @elapsed sweep_spec_map!(dp_spec, Spec_map)
 println("  Dual (ForwardDiff) sweep...")
 t_dual = @elapsed sweep_C_map!(dp_dual, C_map_dual)
 println("  Finite-difference sweep...")
-t_fd   = @elapsed sweep_C_map!(dp_fd,   C_map_fd)
+t_fd = @elapsed sweep_C_map!(dp_fd, C_map_fd)
 
 println("\nWhole-map timing:")
 println("  Spectral radius only : ", round(t_spec; digits=2), " s")
 println("  Dual (ForwardDiff)   : ", round(t_dual; digits=2), " s")
-println("  Finite difference    : ", round(t_fd;   digits=2), " s")
+println("  Finite difference    : ", round(t_fd; digits=2), " s")
 println("  Dual / spec overhead : ", round(t_dual / t_spec; digits=1), "×")
 println("  stable points        : ", count(isfinite, C_map_dual), " / ", length(C_map_dual))
 
 # Confine both C maps to the authoritative (spectral radius sweep) stable region.
 unstable_mask = Spec_map .>= 1.0
 C_map_dual[unstable_mask] .= NaN
-C_map_fd[unstable_mask]   .= NaN
+C_map_fd[unstable_mask] .= NaN
 
 
 ## ── Plot: spectral radius + robustness margin C (Dual) + C (FD), stable region ──
 fig_C = Figure(size=(2000, 650))
-ax_rho  = GLMakie.Axis(fig_C[1, 1],
+ax_rho = GLMakie.Axis(fig_C[1, 1],
     title="Spectral radius ρ = max|μ|  ($(round(t_spec; digits=1)) s)", xlabel="kp", ylabel="kd")
 ax_dual = GLMakie.Axis(fig_C[1, 2],
     title="C — ForwardDiff  ($(round(t_dual; digits=1)) s)", xlabel="kp", ylabel="kd")
-ax_fd   = GLMakie.Axis(fig_C[1, 3],
+ax_fd = GLMakie.Axis(fig_C[1, 3],
     title="C — finite difference  ($(round(t_fd; digits=1)) s)", xlabel="kp", ylabel="kd")
 
 # Shared color range from the (cleaner) Dual map, so the FD noise is visible as
@@ -226,18 +226,12 @@ crange = isempty(finite_vals) ? (0.0, 1.0) : (minimum(finite_vals), maximum(fini
 
 # Spectral radius on the stable region (unstable → NaN)
 Spec_stable = copy(Spec_map)
-Spec_stable[Spec_stable .>= 1.0] .= NaN
+Spec_stable[Spec_stable.>=1.0] .= NaN
 hm_rho = heatmap!(ax_rho, kpv, kdv, log.(Spec_stable'), colormap=:inferno)
 Colorbar(fig_C[2, 1], hm_rho, vertical=false, label="log(ρ)  (unstable → NaN)")
 
 hm_dual = heatmap!(ax_dual, kpv, kdv, C_map_dual', colormap=:viridis, colorrange=crange)
 Colorbar(fig_C[2, 2], hm_dual, vertical=false, label="C (Dual)")
-
-# C = 1 contour on the accurate (Dual) map. Inside this curve C > 1: the linear
-# robustness estimate guarantees |μ| stays < 1 over the FULL specified uncertainty
-# box Δp (i.e. still stable), provided the linearity assumption holds. Outside the
-# curve (C < 1) the box can reach the stability boundary — robustness not guaranteed.
-contour!(ax_dual, kpv, kdv, C_map_dual'; levels=[2.0], color=:white, linewidth=2.5)
 
 hm_fd = heatmap!(ax_fd, kpv, kdv, C_map_fd', colormap=:viridis, colorrange=crange)
 Colorbar(fig_C[2, 3], hm_fd, vertical=false, label="C (FD)")
@@ -263,8 +257,8 @@ dp_stab = dynamic_problemSampled(probMapping, Solver_args, τ_nom;
     Historyresolution=25, zerofixpont=false, affineinteration=1, Krylov_arg=Krylov_arg_stab)
 
 # Coarse seed grids spanning the same (kp, kd) window as the sweep
-kpv_mdbm = LinRange(-1.5, 3.0, RES_mdbm_seed)
-kdv_mdbm = LinRange(-1.0, 4.0, RES_mdbm_seed)
+kpv_mdbm = LinRange(0.5, 4.0, RES_mdbm_seed)
+kdv_mdbm = LinRange(-0.5, 4.0, RES_mdbm_seed)
 foo_stab(kp_loc, kd_loc) =
     log(spectralradius(dp_stab; p=(ζ_nom, ω_nom, kp_loc, kd_loc, τ_nom, T_nom)))
 
@@ -277,26 +271,26 @@ x_mdbm, y_mdbm = getinterpolatedsolution(mymdbm)
 println("  ρ=1 boundary: $(length(x_mdbm)) points  in $(round(t_mdbm_stab; digits=1)) s")
 
 # Overlay the boundary on all three panels (cyan on inferno, red on viridis)
-scatter!(ax_rho,  x_mdbm, y_mdbm, color=:cyan, markersize=4)
-scatter!(ax_dual, x_mdbm, y_mdbm, color=:red,  markersize=4)
-scatter!(ax_fd,   x_mdbm, y_mdbm, color=:red,  markersize=4)
+scatter!(ax_rho, x_mdbm, y_mdbm, color=:cyan, markersize=4)
+scatter!(ax_dual, x_mdbm, y_mdbm, color=:red, markersize=4)
+scatter!(ax_fd, x_mdbm, y_mdbm, color=:red, markersize=4)
 
 save("examples/parameter_Sensitivity_delay_socillator_map.png", fig_C)
 display(fig_C)
 println("MDBM boundary added (", length(x_mdbm), " points). Figure re-saved.")
 
 
-## ─── Validation of the C = 2 robustness boundary ─────────────────────────────
+## ─── Validation of the C = C_validate robustness boundary ─────────────────────────────
 # At a point with margin C, scaling the uncertainty box by C brings the worst-case
-# |μ| to 1. So inside the C ≥ 2 region the system should stay stable under ANY
+# |μ| to 1. So inside the C ≥ C_validate region the system should stay stable under ANY
 # parameter perturbation within 2·Δp. We validate empirically: for many perturbed
 # parameter realisations inside the 2·Δp box we recompute the ρ=1 stability
-# boundary (in the kp–kd design plane) and overlay it. If the C=2 prediction holds
+# boundary (in the kp–kd design plane) and overlay it. If the C=C_validate prediction holds
 # (and the system is linear enough), every perturbed boundary stays on the
-# UNSTABLE side of the C=2 contour — i.e. none intrudes into the C ≥ 2 region.
-const C_validate   = 2.0
-const N_random     = RES_N_random
-const png_path     = "examples/parameter_Sensitivity_delay_socillator_map.png"
+# UNSTABLE side of the C=C_validate contour — i.e. none intrudes into the C ≥ C_validate region.
+const C_validate = 3.0
+const N_random = RES_N_random
+const png_path = "examples/parameter_Sensitivity_delay_socillator_map.png"
 
 # Maximum delay that can appear in the validation: τ_nom · (1 + C_validate · τ_var).
 # The dynamic problem used for validation must declare this as its history window
@@ -314,7 +308,8 @@ dp_val = dynamic_problemSampled(probMapping_val, Solver_args, τ_max_val;
 
 # C=2 contour on the accurate (Dual) map — the boundary under test.
 contour!(ax_dual, kpv, kdv, C_map_dual'; levels=[C_validate], color=:cyan, linewidth=2.5)
-save(png_path, fig_C); display(fig_C)
+save(png_path, fig_C);
+display(fig_C);
 
 # ρ=1 boundary in the (kp,kd) design plane for a perturbation given as ratios
 # r = (rζ, rω, rkp, rkd, rτ) ∈ [-1,1]^5, scaled by C_validate · (local box).
@@ -324,32 +319,35 @@ function perturbed_boundary(r)
     rζ, rω, rkp, rkd, rτ = r
     sc = C_validate
     foo(kp, kd) = log(spectralradius(dp_val; p=(
-        ζ_nom + rζ * sc * ζ_var  * abs(ζ_nom),
-        ω_nom + rω * sc * ω_var  * abs(ω_nom),
-        kp    + rkp * sc * kp_var * abs(kp),
-        kd    + rkd * sc * kd_var * abs(kd),
-        τ_nom + rτ * sc * τ_var  * abs(τ_nom),
+        ζ_nom + rζ * sc * ζ_var * abs(ζ_nom),
+        ω_nom + rω * sc * ω_var * abs(ω_nom),
+        kp + rkp * sc * kp_var * abs(kp),
+        kd + rkd * sc * kd_var * abs(kd),
+        τ_nom + rτ * sc * τ_var * abs(τ_nom),
         T_nom)))
     prob = MDBM_Problem(foo, [MDBM.Axis(kpv_mdbm, "kp"), MDBM.Axis(kdv_mdbm, "kd")])
     try
-        MDBM.solve!(prob, RES_mdbm_iter, interpolationorder=0, verbosity=0)
-        MDBM.solve!(prob, 0, interpolationorder=1, verbosity=0)
+        @time begin
+            MDBM.solve!(prob, RES_mdbm_iter - 1, interpolationorder=0, verbosity=0)
+            MDBM.solve!(prob, 0, interpolationorder=1, verbosity=0)
+        end
         return getinterpolatedsolution(prob)
     catch
         return Float64[], Float64[]
     end
 end
 
-overlay!(xb, yb, col) = for ax in (ax_rho, ax_dual, ax_fd)
-    scatter!(ax, xb, yb, color=col, markersize=5)
-end
+overlay!(xb, yb, col) =
+    for ax in (ax_rho, ax_dual, ax_fd)
+        scatter!(ax, xb, yb, color=col, markersize=5)
+    end
 
 # Identify which of the 5 parameters (ζ,ω,kp,kd,τ) have non-zero uncertainty.
 # Only these are varied in the random and corner sweeps; the others stay at nominal.
-const val_vars   = (ζ_var, ω_var, kp_var, kd_var, τ_var)
+const val_vars = (ζ_var, ω_var, kp_var, kd_var, τ_var)
 const active_idx = findall(!iszero, val_vars)   # indices into the 5-tuple
 const n_active_v = length(active_idx)
-const n_corners  = 2^n_active_v
+const n_corners = 2^n_active_v
 
 println("Active uncertain parameters: $n_active_v / 5  (positions $active_idx in (ζ,ω,kp,kd,τ))")
 println("  → $N_random random + $n_corners corner ($n_active_v-cube) cases")
@@ -368,8 +366,9 @@ println("\nC=$C_validate validation: $N_random random realisations...")
 for n in 1:N_random
     r = make_r(ntuple(_ -> 2rand() - 1, n_active_v))
     xb, yb = perturbed_boundary(r)
-    overlay!(xb, yb, (:gray, 0.4))
-    save(png_path, fig_C); display(fig_C)
+    overlay!(xb, yb, (:black, 0.8))
+    save(png_path, fig_C)
+    display(fig_C)
     println("  random $n/$N_random  ($(length(xb)) boundary points)")
 end
 
@@ -379,7 +378,8 @@ for (k, c) in enumerate(Iterators.product(ntuple(_ -> (-1.0, 1.0), n_active_v)..
     r = make_r(c)
     xb, yb = perturbed_boundary(r)
     overlay!(xb, yb, (:orange, 0.7))
-    save(png_path, fig_C); display(fig_C)
+    save(png_path, fig_C)
+    display(fig_C)
     println("  corner $k/$n_corners  active_signs=$(c)  ($(length(xb)) boundary points)")
 end
 
@@ -407,18 +407,18 @@ println("overlaid boundaries from the stable side, the linear robustness estimat
 
 function C_boundary_func(kp_loc, kd_loc)::Float64
     p_loc = (ζ_nom, ω_nom, kp_loc, kd_loc, τ_nom, T_nom)
-    delta_p_loc = (ζ_var  * abs(ζ_nom),
-                   ω_var  * abs(ω_nom),
-                   kp_var * abs(kp_loc),
-                   kd_var * abs(kd_loc),
-                   τ_var  * abs(τ_nom),
-                   T_var  * abs(T_nom))
+    delta_p_loc = (ζ_var * abs(ζ_nom),
+        ω_var * abs(ω_nom),
+        kp_var * abs(kp_loc),
+        kd_var * abs(kd_loc),
+        τ_var * abs(τ_nom),
+        T_var * abs(T_nom))
 
     # affine gives both eigenvalues and the Schur basis (no early exit for unstable)
     mus, s_nom = affine(dp_dual; p=p_loc)
-    all_mu  = ComplexF64.(mus[1])
-    n_eff   = min(dp_dual.Krylov_arg[1], length(all_mu))
-    mu_nom  = all_mu[1:n_eff]
+    all_mu = ComplexF64.(mus[1])
+    n_eff = min(dp_dual.Krylov_arg[1], length(all_mu))
+    mu_nom = all_mu[1:n_eff]
     eigvecs = mus[2]
 
     # Dual sensitivities (exact, same method as the C map)
@@ -436,8 +436,8 @@ end
 println("\nDirect MDBM C = $C_validate boundary (Dual sensitivities)...")
 C_boundary_func(kp_nom, kd_nom)   # warmup / JIT
 
-kpv_Cm = LinRange(-1.5, 3.0, RES_mdbm_seed)
-kdv_Cm = LinRange(-1.0, 4.0, RES_mdbm_seed)
+kpv_Cm = LinRange(0.5, 4.0, RES_mdbm_seed)
+kdv_Cm = LinRange(-0.5, 4.0, RES_mdbm_seed)
 mdbm_C = MDBM_Problem(C_boundary_func,
     [MDBM.Axis(kpv_Cm, "kp"), MDBM.Axis(kdv_Cm, "kd")])
 t_mdbm_C = @elapsed begin
@@ -451,14 +451,15 @@ println("  C = $C_validate MDBM boundary: $(length(x_Cm)) points  in $(round(t_m
 # C = C_validate contour extracted from the heatmap, validating both methods.
 scatter!(ax_dual, x_Cm, y_Cm, color=:lime, markersize=3, marker=:diamond,
     label="MDBM C=$C_validate")
-save(png_path, fig_C); display(fig_C)
+save(png_path, fig_C);
+display(fig_C);
 println("MDBM C boundary overlaid (lime ◇). Should match cyan contour from heatmap.")
 
 println("\n─── MDBM timing comparison ───────────────────────────────────────────────")
 println("  ρ = 1  boundary  (spectralradius only, Neig=2)  : ",
-        round(t_mdbm_stab; digits=2), " s   ($(length(x_mdbm)) pts)")
+    round(t_mdbm_stab; digits=2), " s   ($(length(x_mdbm)) pts)")
 println("  C = $C_validate boundary  (Dual sensitivities,  Neig=$Neig_fast) : ",
-        round(t_mdbm_C;   digits=2), " s   ($(length(x_Cm)) pts)")
+    round(t_mdbm_C; digits=2), " s   ($(length(x_Cm)) pts)")
 println("  Overhead ratio C / ρ : ", round(t_mdbm_C / t_mdbm_stab; digits=1), "×")
 println("  This matches the per-point ratio: spectralradius ≈ 1 LinMap,")
 println("  C_boundary ≈ $Neig_fast LinMap calls (Schur subspace) + O(n_active) Dual arith.")
