@@ -444,13 +444,19 @@ function compute_second_order_sens(dp,
         am = abs(λ[m]);   am < eps(Float64) && continue
 
         for (i_idx, i) in enumerate(active), (k_idx, k) in enumerate(active)
-            # 2nd-order eigenvalue perturbation theory (see theory doc)
+            # Mixed 2nd-order eigenvalue derivative ∂²λ_m/∂p_i∂p_k via non-degenerate
+            # perturbation theory. The cross term MUST be symmetrized over the two
+            # parameter orderings — a single product M1[i][m,l]·M1[k][l,m] is NOT
+            # symmetric in i↔k, so omitting the (k,i) ordering gives a spuriously
+            # asymmetric Hessian (the bug this replaces). Both orderings:
+            #   Σ_{l≠m} [ M1[i][m,l]·M1[k][l,m] + M1[k][m,l]·M1[i][l,m] ] / (λ_m−λ_l)
             d_ik = M2[i_idx, k_idx][m, m]
             for l in 1:nb
                 l == m && continue
                 denom = λ[m] - λ[l]
                 abs(denom) < 1e-14 && continue
-                d_ik += M1[i_idx][m, l] * M1[k_idx][l, m] / denom
+                d_ik += (M1[i_idx][m, l] * M1[k_idx][l, m] +
+                         M1[k_idx][m, l] * M1[i_idx][l, m]) / denom
             end
 
             # Hessian of |λ_m| from chain rule
