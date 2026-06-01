@@ -16,7 +16,7 @@ using StaticArrays
 using DifferentialEquations
 using LinearAlgebra
 using KrylovKit
-using GLMakieno
+using GLMakie
 using MDBM
 
 ## ─── Resolution / fidelity parameters (edit here to switch between runs) ─────
@@ -27,12 +27,12 @@ const RES_mdbm_seed = 14       # MDBM coarse-grid size (each axis)
 const RES_mdbm_iter = 6        # MDBM refinement iterations
 const RES_N_random = 20       # random grey validation curves
 
-# #  LOW-RESOLUTION (fast preview — uncomment to switch)
-# const RES_sweep_kp = 30
-# const RES_sweep_kd = 31
-# const RES_mdbm_seed = 10
-# const RES_mdbm_iter = 4
-# const RES_N_random = 5
+ #  LOW-RESOLUTION (fast preview — uncomment to switch)
+ const RES_sweep_kp = 30
+ const RES_sweep_kd = 31
+ const RES_mdbm_seed = 10
+ const RES_mdbm_iter = 4
+ const RES_N_random = 5
 
 ## ─────────────────────────────────────────────────────────────────────────────
 
@@ -81,8 +81,8 @@ include(joinpath(@__DIR__, "..", "src", "robust_control.jl"))
 # Predefined uncertainty ratios (as a ratio of the nominal values)
 const ζ_var = 0.02
 const ω_var = 0.02
-const kp_var = 0.05
-const kd_var = 0.05
+const kp_var = 1.2
+const kd_var = 1.2
 const τ_var = 0.02
 const T_var = 0.03      # T is tied to τ in this study
 

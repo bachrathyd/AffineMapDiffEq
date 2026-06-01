@@ -28,19 +28,19 @@ using MDBM
 using Statistics
 
 # ## ─── Resolution parameters ────────────────────────────────────────────────────
-# # HIGH-RESOLUTION (production)
-# const RES_sweep_kp  = 160
-# const RES_sweep_kd  = 161
-# const RES_mdbm_seed = 12
-# const RES_mdbm_iter = 5
-# const RES_N_mc      = 25     # number of MC MDBM validations
+ # HIGH-RESOLUTION (production)
+ const RES_sweep_kp  = 160
+ const RES_sweep_kd  = 161
+ const RES_mdbm_seed = 12
+ const RES_mdbm_iter = 5
+ const RES_N_mc      = 25     # number of MC MDBM validations
 
- # Midlle-RESOLUTION (production)
- const RES_sweep_kp  = 40
- const RES_sweep_kd  = 41
- const RES_mdbm_seed = 7
- const RES_mdbm_iter = 4
- const RES_N_mc      = 10     # number of MC MDBM validations
+# # Midlle-RESOLUTION (production)
+# const RES_sweep_kp  = 80
+# const RES_sweep_kd  = 81
+# const RES_mdbm_seed = 7
+# const RES_mdbm_iter = 4
+# const RES_N_mc      = 10     # number of MC MDBM validations
 
 # # LOW-RESOLUTION (fast preview — uncomment to switch)
 #  const RES_sweep_kp  = 20
@@ -59,7 +59,7 @@ function DelayPDOsc!(du, u, h, p, t)
     du[2] = +ω^2 * u[1] - 2ζ*ω * u[2] - kp * hτ[1] - kd * hτ[2] + F
 end
 
-const ζ_nom, ω_nom, kp_nom, kd_nom, τ_nom, T_nom = -0.02, 1.0, 2.0, 2.0, 0.5, 0.5
+const ζ_nom, ω_nom, kp_nom, kd_nom, τ_nom, T_nom = -0.02, 1.0, 1.2, 1.2, 0.5, 0.5
 const p_init = (ζ_nom, ω_nom, kp_nom, kd_nom, τ_nom, T_nom)
 
 u0 = @MArray [0.0, 0.0]
@@ -74,7 +74,7 @@ include(joinpath(@__DIR__, "..", "src", "robust_control.jl"))
 const ζ_var, ω_var, kp_var, kd_var, τ_var, T_var = 0.02, 0.00, 0.05, 0.05, 0.02, 0.0
 const delta_p_nom = (ζ_var*abs(ζ_nom), ω_var*abs(ω_nom), kp_var*abs(kp_nom),
                      kd_var*abs(kd_nom), τ_var*abs(τ_nom), 0.0)
-const C_validate = 1.0
+const C_validate = 2.0
 
 ## ─── Dynamic problems ─────────────────────────────────────────────────────────
 Neig_spec = 2
